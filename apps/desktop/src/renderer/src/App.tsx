@@ -21,6 +21,24 @@ const CONNECTION_LABEL: Record<ConnectionState, string> = {
   [ConnectionState.SignalReconnecting]: 'Reconectando (sinal)',
 };
 
+/** O que esta segurando a qualidade, direto do RTCStats. */
+const LIMIT_LABEL: Record<string, string> = {
+  none: 'nenhum',
+  cpu: 'CPU (encoder não dá conta)',
+  bandwidth: 'banda',
+  other: 'outro',
+};
+
+/**
+ * `encoderImplementation` denuncia se a codificação é por software.
+ * libvpx = VP8/VP9 na CPU; nomes com MediaFoundation/AMF/NVENC = GPU.
+ */
+function encoderLabel(impl: string | null): string {
+  if (!impl) return '—';
+  const software = /libvpx|openh264|libaom/i.test(impl);
+  return `${impl} ${software ? '(software)' : '(hardware)'}`;
+}
+
 export function App(): React.JSX.Element {
   const [state, setState] = useState<BroadcastState>(() => {
     let initial!: BroadcastState;
@@ -205,6 +223,12 @@ function LivePanel({ state }: { state: BroadcastState }): React.JSX.Element {
         <Stat label="Participantes" value={String(stats.viewers)} />
         <Stat label="Conexão" value={CONNECTION_LABEL[stats.connection]} />
         <Stat label="Qualidade" value={QUALITY_LABEL[stats.quality]} />
+        <Stat label="Encoder" value={encoderLabel(stats.encoder)} />
+        <Stat label="Gargalo" value={LIMIT_LABEL[stats.limitedBy ?? 'none'] ?? stats.limitedBy!} />
+        <Stat
+          label="Quadros perdidos"
+          value={stats.framesDropped !== null ? String(stats.framesDropped) : '—'}
+        />
       </dl>
 
       <label className="link">

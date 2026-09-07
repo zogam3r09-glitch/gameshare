@@ -40,6 +40,12 @@ export interface LiveStats {
   encodedFps: number | null;
   /** kbps de video calculado por delta de bytesSent; null antes da 2a amostra */
   videoKbps: number | null;
+  /** implementacao do encoder; revela se e software (libvpx) ou hardware */
+  encoder: string | null;
+  /** o que esta limitando a qualidade: 'cpu', 'bandwidth', 'none'… */
+  limitedBy: string | null;
+  /** quadros que o encoder deixou cair por nao dar conta */
+  framesDropped: number | null;
   viewers: number;
   quality: ConnectionQuality;
   connection: ConnectionState;
@@ -66,6 +72,9 @@ const EMPTY_STATS: LiveStats = {
   captureFps: null,
   encodedFps: null,
   videoKbps: null,
+  encoder: null,
+  limitedBy: null,
+  framesDropped: null,
   viewers: 0,
   quality: ConnectionQuality.Unknown,
   connection: ConnectionState.Disconnected,
@@ -221,6 +230,17 @@ export class Broadcaster {
       this.failure('A captura nao retornou video.');
       return;
     }
+
+    /**
+     * Diz ao encoder que isto e conteudo em movimento, nao um documento.
+     *
+     * Sem contentHint o Chromium trata captura de tela como conteudo estatico e
+     * prioriza nitidez sobre fluidez — derrubando o framerate para manter a
+     * resolucao. Para jogo queremos o contrario. O livekit-client so define
+     * contentHint sozinho em createScreenTracks ou com codecs SVC, e aqui o
+     * LocalVideoTrack e construido na mao, entao precisa ser explicito.
+     */
+    videoMst.contentHint = 'motion';
 
     const audioMst = stream.getAudioTracks()[0] ?? null;
     if (!audioMst) {
@@ -389,15 +409,33 @@ export class Broadcaster {
 
     let encodedFps: number | null = null;
     let bytesSent: number | null = null;
+    let encoder: string | null = null;
+    let limitedBy: string | null = null;
+    let framesDropped: number | null = null;
+
     report.forEach((entry) => {
       const s = entry as RTCStats & {
         kind?: string;
         framesPerSecond?: number;
         bytesSent?: number;
+        encoderImplementation?: string;
+        qualityLimitationReason?: string;
+        framesSent?: number;
+        framesEncoded?: number;
       };
       if (s.type !== 'outbound-rtp' || s.kind !== 'video') return;
       if (typeof s.framesPerSecond === 'number') encodedFps = Math.round(s.framesPerSecond);
       if (typeof s.bytesSent === 'number') bytesSent = (bytesSent ?? 0) + s.bytesSent;
+      if (typeof s.encoderImplementation === 'string') encoder = s.encoderImplementation;
+      if (typeof s.qualityLimitationReason === 'string') limitedBy = s.qualityLimitationReason;
+    });
+
+    // quadros capturados que nunca chegaram ao encoder
+    report.forEach((entry) => {
+      const s = entry as RTCStats & { kind?: string; framesDropped?: number };
+      if (s.type === 'media-source' && s.kind === 'video' && typeof s.framesDropped === 'number') {
+        framesDropped = s.framesDropped;
+      }
     });
 
     let videoKbps: number | null = this.state.stats.videoKbps;
@@ -410,7 +448,7 @@ export class Broadcaster {
       this.lastBytesSent = { bytes: bytesSent, at: now };
     }
 
-    this.setStats({ encodedFps, videoKbps });
+    this.setStats({ encodedFps, videoKbps, encoder, limitedBy, framesDropped });
   }
 
   // -------------------------------------------------------------------------
