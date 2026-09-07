@@ -65,7 +65,8 @@ test('sonda: jitter buffer e fps do lado receptor', async ({ browser, baseURL })
     await r.localParticipant.publishTrack(new lk.LocalVideoTrack(videoMst), {
       source: lk.Track.Source.ScreenShare,
       simulcast: false,
-      videoEncoding: { maxBitrate: 2_500_000, maxFramerate: 30 },
+      // igual ao app: ScreenShare le screenShareEncoding, nao videoEncoding
+      screenShareEncoding: { maxBitrate: 2_500_000, maxFramerate: 30 },
       degradationPreference: 'maintain-framerate',
     });
     (globalThis as unknown as { __room: unknown }).__room = r;

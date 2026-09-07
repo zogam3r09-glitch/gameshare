@@ -313,7 +313,16 @@ export class Broadcaster {
         name: 'screen',
         source: Track.Source.ScreenShare,
         simulcast: false, // POC: uma camada so, menos CPU e menos latencia
-        videoEncoding: { maxBitrate: preset.maxBitrate, maxFramerate: preset.frameRate },
+        /**
+         * `screenShareEncoding`, NAO `videoEncoding`.
+         *
+         * Para source ScreenShare o livekit-client le exclusivamente
+         * screenShareEncoding e ignora videoEncoding em silencio. O padrao e
+         * ScreenSharePresets.h1080fps15, ou seja um teto de 15 FPS. Foi o que
+         * segurou a transmissao em 14-16 fps mesmo depois de a captura passar
+         * a entregar 720p30 certinho.
+         */
+        screenShareEncoding: { maxBitrate: preset.maxBitrate, maxFramerate: preset.frameRate },
         degradationPreference: 'maintain-framerate', // jogo: preferimos fps a nitidez
       });
       log.info('video publicado', { preset: preset.name });

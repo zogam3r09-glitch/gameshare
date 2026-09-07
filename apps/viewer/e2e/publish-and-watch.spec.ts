@@ -50,6 +50,8 @@ async function startFakePublisher(page: Page, baseURL: string): Promise<CreatedR
     await room.localParticipant.publishTrack(new lk.LocalVideoTrack(stream.getVideoTracks()[0]!), {
       source: lk.Track.Source.ScreenShare,
       simulcast: false,
+      // espelha o app: ScreenShare le screenShareEncoding, nao videoEncoding
+      screenShareEncoding: { maxBitrate: 2_500_000, maxFramerate: 30 },
     });
     await room.localParticipant.publishTrack(new lk.LocalAudioTrack(stream.getAudioTracks()[0]!), {
       source: lk.Track.Source.ScreenShareAudio,
@@ -146,6 +148,43 @@ test.describe('publisher -> viewer', () => {
     await expect(viewer.getByRole('heading', { name: 'Transmissão encerrada' })).toBeVisible({
       timeout: 20_000,
     });
+
+    await pubContext.close();
+  });
+
+  test('screen share negocia o framerate pedido, nao o padrao de 15fps do SDK', async ({
+    browser,
+    baseURL,
+  }) => {
+    const pubContext = await browser.newContext();
+    const pub = await pubContext.newPage();
+
+    try {
+      await startFakePublisher(pub, baseURL!);
+    } catch (err) {
+      await pubContext.close();
+      test.skip(true, `LiveKit indisponivel: ${String(err)}`);
+      return;
+    }
+
+    /**
+     * Regressao cara de achar: para source ScreenShare o livekit-client le
+     * `screenShareEncoding` e ignora `videoEncoding` em silencio. Com
+     * `videoEncoding` a transmissao caia no padrao ScreenSharePresets
+     * .h1080fps15 e ficava travada em 15 FPS, independente do que a captura
+     * entregasse — sem nenhum erro e com qualityLimitationReason "none".
+     */
+    const maxFramerate = await pub.evaluate(() => {
+      const r = (globalThis as unknown as { __room: LiveKit.Room }).__room;
+      const publication = [...r.localParticipant.trackPublications.values()].find(
+        (p) => p.kind === 'video',
+      );
+      // `sender` e getter publico do LocalTrack
+      const params = publication?.track?.sender?.getParameters();
+      return params?.encodings?.[0]?.maxFramerate ?? null;
+    });
+
+    expect(maxFramerate).toBe(30);
 
     await pubContext.close();
   });
