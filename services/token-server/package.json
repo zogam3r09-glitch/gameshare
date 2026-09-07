@@ -1,0 +1,28 @@
+{
+  "name": "@game-share/token-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "echo \"(V0.1) token-server roda via tsx; bundle de producao ainda nao e necessario\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@game-share/shared": "workspace:*",
+    "cors": "2.8.6",
+    "dotenv": "17.4.2",
+    "express": "5.2.1",
+    "livekit-server-sdk": "2.18.0"
+  },
+  "devDependencies": {
+    "@types/cors": "2.8.19",
+    "@types/express": "5.0.6",
+    "@types/node": "24.13.3",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3",
+    "vitest": "5.0.0"
+  }
+}

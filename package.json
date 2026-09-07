@@ -1,0 +1,30 @@
+{
+  "name": "game-share-poc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "POC V0.1 - compartilhamento privado de tela/jogo entre amigos (Electron + LiveKit + Browser viewer)",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "dev:server": "pnpm --filter @game-share/token-server dev",
+    "dev:viewer": "pnpm --filter @game-share/viewer dev",
+    "dev:desktop": "pnpm --filter @game-share/desktop dev",
+    "livekit:dev": "node scripts/livekit-dev.mjs",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm --filter @game-share/viewer test:e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@types/node": "24.13.3",
+    "eslint": "9.39.5",
+    "globals": "17.12.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.0"
+  }
+}

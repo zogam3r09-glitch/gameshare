@@ -1,0 +1,159 @@
+:root {
+  --bg: #0b0d10;
+  --bar: #14181d;
+  --line: #232a32;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --warn: #e3b341;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 system-ui, 'Segoe UI', sans-serif;
+}
+
+.shell {
+  position: relative;
+  height: 100%;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  background: #000;
+}
+
+.stage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+
+.stage--on {
+  opacity: 1;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0 0 44px;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+}
+
+.state {
+  text-align: center;
+  padding: 24px;
+}
+
+.state h1 {
+  font-size: 19px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.state p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.state__body {
+  max-width: 46ch;
+}
+
+.spinner {
+  width: 34px;
+  height: 34px;
+  margin: 0 auto 16px;
+  border: 3px solid var(--line);
+  border-top-color: var(--muted);
+  border-radius: 50%;
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.unmute {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font: inherit;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgb(20 24 29 / 92%);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.bar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px;
+  background: var(--bar);
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.bar__room {
+  font-family: ui-monospace, 'Cascadia Mono', monospace;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+
+.bar__vol {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.bar__vol input {
+  width: 92px;
+  accent-color: #3fb950;
+}
+
+.bar__vol input:disabled {
+  opacity: 0.35;
+}
+
+.bar__item--warn {
+  color: var(--warn);
+}
+
+.bar__btn {
+  margin-left: auto;
+  font: inherit;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bar__btn:hover {
+  background: #1d232a;
+}
