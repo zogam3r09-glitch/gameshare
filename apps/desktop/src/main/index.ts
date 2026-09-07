@@ -130,6 +130,15 @@ function createWindow(): BrowserWindow {
     log.error('renderer morreu', { reason: details.reason, exitCode: details.exitCode });
   });
 
+  // Em dev, espelha o console do renderer no terminal. Sem isto os logs de
+  // diagnostico (metricas do encoder, erros de publicacao) so existem no
+  // devtools e desaparecem quando a janela fecha.
+  if (isDev) {
+    win.webContents.on('console-message', (_e, _level, message) => {
+      log.debug(`[renderer] ${message}`);
+    });
+  }
+
   const devUrl = process.env.ELECTRON_RENDERER_URL;
   if (isDev && devUrl) {
     void win.loadURL(devUrl);
