@@ -54,10 +54,18 @@ export interface ViewerTokenResponse {
   expiresAt: number;
 }
 
+/** POST /api/rooms/:roomId/end — exige o token de PUBLISHER daquela sala. */
+export interface EndRoomResponse {
+  roomId: string;
+  /** false quando a sala ja nao existia no SFU (encerrar duas vezes nao e erro) */
+  deleted: boolean;
+}
+
 export type ApiErrorCode =
   | 'INVALID_ROOM_ID'
   | 'SERVER_MISCONFIGURED'
   | 'NOT_FOUND'
+  | 'UNAUTHORIZED'
   | 'INTERNAL';
 
 export interface ApiErrorResponse {

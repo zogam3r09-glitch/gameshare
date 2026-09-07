@@ -10,11 +10,13 @@ import {
   redactToken,
   type ApiErrorResponse,
   type CreateRoomResponse,
+  type EndRoomResponse,
   type HealthResponse,
   type ViewerTokenResponse,
 } from '@game-share/shared';
+import { RoomServiceClient } from 'livekit-server-sdk';
 import type { Env } from './env.js';
-import { issuePublisherToken, issueViewerToken } from './tokens.js';
+import { isPublisherOf, issuePublisherToken, issueViewerToken } from './tokens.js';
 
 const log = createLogger('token-server');
 const VERSION = '0.1.0';
@@ -24,9 +26,35 @@ function fail(res: Response, status: number, body: ApiErrorResponse): void {
   res.status(status).json(body);
 }
 
-export function createApp(env: Env, problems: string[]): express.Express {
+/** O RoomService fala HTTP; LIVEKIT_URL e ws(s)://. */
+export function livekitHttpUrl(wsUrl: string): string {
+  return wsUrl.replace(/^ws/i, 'http');
+}
+
+/** Extrai o bearer token do header Authorization. */
+function bearer(req: Request): string | null {
+  const header = req.get('authorization');
+  const match = header ? /^Bearer\s+(.+)$/i.exec(header) : null;
+  return match ? match[1]!.trim() : null;
+}
+
+export interface AppDeps {
+  /** Injetavel para os testes rodarem sem um LiveKit de verdade. */
+  deleteRoom?: (roomId: string) => Promise<void>;
+}
+
+export function createApp(env: Env, problems: string[], deps: AppDeps = {}): express.Express {
   const app = express();
   const configured = problems.length === 0;
+
+  const deleteRoom =
+    deps.deleteRoom ??
+    ((roomId: string) =>
+      new RoomServiceClient(
+        livekitHttpUrl(env.livekitUrl),
+        env.livekitApiKey,
+        env.livekitApiSecret,
+      ).deleteRoom(roomId));
 
   app.disable('x-powered-by');
   app.use(express.json({ limit: '16kb' }));
@@ -121,6 +149,54 @@ export function createApp(env: Env, problems: string[]): express.Express {
           livekitUrl: env.livekitUrl,
           expiresAt: issued.expiresAt,
         };
+        res.json(body);
+      })
+      .catch(next);
+  });
+
+  /**
+   * Encerra a sala no SFU, derrubando os espectadores na hora em vez de
+   * esperar o emptyTimeout. Autorizado pelo token de PUBLISHER da sala: quem
+   * so tem o link recebeu um token de viewer e nao consegue encerrar nada.
+   */
+  app.post('/api/rooms/:roomId/end', requireConfig, (req, res, next) => {
+    const roomId = normalizeRoomId(String(req.params.roomId ?? ''));
+    if (!isValidRoomId(roomId)) {
+      fail(res, 400, { code: 'INVALID_ROOM_ID', error: 'Codigo de sala invalido.' });
+      return;
+    }
+
+    const token = bearer(req);
+    if (!token) {
+      fail(res, 401, { code: 'UNAUTHORIZED', error: 'Token de publisher ausente.' });
+      return;
+    }
+
+    isPublisherOf(env.livekitApiKey, env.livekitApiSecret, token, roomId)
+      .then(async (allowed) => {
+        if (!allowed) {
+          log.warn('tentativa de encerrar sala sem permissao', { roomId });
+          fail(res, 403, {
+            code: 'UNAUTHORIZED',
+            error: 'Este token nao pode encerrar esta transmissao.',
+          });
+          return;
+        }
+
+        let deleted = true;
+        try {
+          await deleteRoom(roomId);
+          log.info('sala encerrada no SFU', { roomId });
+        } catch (err) {
+          // encerrar uma sala ja vazia/inexistente nao e erro do cliente
+          deleted = false;
+          log.warn('deleteRoom falhou (sala ja encerrada?)', {
+            roomId,
+            message: errorMessage(err),
+          });
+        }
+
+        const body: EndRoomResponse = { roomId, deleted };
         res.json(body);
       })
       .catch(next);

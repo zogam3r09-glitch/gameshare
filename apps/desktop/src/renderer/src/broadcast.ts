@@ -18,7 +18,7 @@ import {
   type CreateRoomResponse,
   type QualityPresetName,
 } from '@game-share/shared';
-import { TokenServerError, createRoom } from './api.js';
+import { TokenServerError, createRoom, endRoom } from './api.js';
 
 const log = createLogger('broadcast');
 
@@ -169,6 +169,11 @@ export class Broadcaster {
 
   selectSource(sourceId: string): void {
     this.set({ selectedSourceId: sourceId });
+  }
+
+  /** Só tem efeito antes de iniciar: o preset é aplicado na captura. */
+  setPreset(preset: QualityPresetName): void {
+    if (this.state.phase === 'choosing') this.set({ preset });
   }
 
   // -------------------------------------------------------------------------
@@ -443,6 +448,15 @@ export class Broadcaster {
       } catch (err) {
         log.warn('erro ao desconectar do LiveKit', { message: errorMessage(err) });
       }
+    }
+
+    // derruba os espectadores agora em vez de esperar o emptyTimeout do SFU
+    const created = this.state.room;
+    if (created) {
+      const ok = await endRoom(created.roomId, created.token);
+      log.info(ok ? 'sala encerrada no SFU' : 'sala nao pode ser encerrada no SFU', {
+        roomId: created.roomId,
+      });
     }
 
     for (const t of [this.videoTrack, this.audioTrack]) {

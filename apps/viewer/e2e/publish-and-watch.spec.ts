@@ -110,17 +110,59 @@ test.describe('publisher -> viewer', () => {
     // O publisher nao deve ser contado como espectador.
     await expect(viewer.getByTitle('Espectadores')).toHaveText(/1/);
 
-    // Encerramento explicito, como o botao ENCERRAR TRANSMISSAO do desktop.
+    // Encerramento explicito, exatamente como o botao ENCERRAR TRANSMISSAO do
+    // desktop: desconecta e manda encerrar a sala no SFU.
     // (Fechar a aba na marra e outro caso: sem sinal de "leave", o SFU so
     // percebe depois do timeout da peer connection, ~20s.)
     await pub.evaluate(async () => {
       await (globalThis as unknown as { __room: { disconnect(): Promise<void> } }).__room.disconnect();
     });
 
+    const ended = await pub.request.post(`${TOKEN_SERVER}/api/rooms/${room.roomId}/end`, {
+      headers: { authorization: `Bearer ${room.token}` },
+    });
+    expect(ended.ok()).toBe(true);
+    expect((await ended.json()) as { deleted: boolean }).toMatchObject({ deleted: true });
+
     // Publisher saiu => o viewer avisa, em vez de congelar.
     await expect(viewer.getByRole('heading', { name: 'Transmissão encerrada' })).toBeVisible({
       timeout: 20_000,
     });
+
+    await pubContext.close();
+  });
+
+  test('um espectador nao consegue encerrar a transmissao de outra pessoa', async ({
+    browser,
+    baseURL,
+    request,
+  }) => {
+    const pubContext = await browser.newContext();
+    const pub = await pubContext.newPage();
+
+    let room: CreatedRoom;
+    try {
+      room = await startFakePublisher(pub, baseURL!);
+    } catch (err) {
+      await pubContext.close();
+      test.skip(true, `LiveKit indisponivel: ${String(err)}`);
+      return;
+    }
+
+    // o que um espectador consegue obter com o link e apenas um token de viewer
+    const viewerToken = (await (
+      await request.post(`${TOKEN_SERVER}/api/rooms/${room.roomId}/viewer-token`)
+    ).json()) as { token: string };
+
+    const attempt = await request.post(`${TOKEN_SERVER}/api/rooms/${room.roomId}/end`, {
+      headers: { authorization: `Bearer ${viewerToken.token}` },
+    });
+    expect(attempt.status()).toBe(403);
+
+    // e a transmissao continua no ar para quem esta assistindo
+    const viewer = await (await browser.newContext()).newPage();
+    await viewer.goto(`/watch/${room.roomId}`);
+    await expect(viewer.locator('video.stage--on')).toBeVisible({ timeout: 20_000 });
 
     await pubContext.close();
   });

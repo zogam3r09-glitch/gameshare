@@ -1,4 +1,4 @@
-import { AccessToken, type VideoGrant } from 'livekit-server-sdk';
+import { AccessToken, TokenVerifier, type VideoGrant } from 'livekit-server-sdk';
 import { newPublisherIdentity, newViewerIdentity } from '@game-share/shared';
 
 /**
@@ -57,4 +57,25 @@ export function issuePublisherToken(opts: IssueOptions): Promise<IssuedToken> {
 
 export function issueViewerToken(opts: IssueOptions): Promise<IssuedToken> {
   return issue(opts, newViewerIdentity(), VIEWER_GRANT(opts.roomId), 'Espectador');
+}
+
+/**
+ * Prova de que quem chamou e o streamer daquela sala.
+ *
+ * O proprio token de publisher e a credencial: quem tem o link so recebeu um
+ * token de viewer (sem canPublish), entao nao consegue encerrar a transmissao
+ * de outra pessoa. Nao precisamos guardar estado nenhum para isso.
+ */
+export async function isPublisherOf(
+  apiKey: string,
+  apiSecret: string,
+  token: string,
+  roomId: string,
+): Promise<boolean> {
+  try {
+    const claims = await new TokenVerifier(apiKey, apiSecret).verify(token);
+    return claims.video?.room === roomId && claims.video?.canPublish === true;
+  } catch {
+    return false;
+  }
 }

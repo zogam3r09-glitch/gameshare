@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ConnectionQuality, ConnectionState } from 'livekit-client';
-import type { CaptureSource } from '@game-share/shared';
+import { QUALITY_PRESETS, type CaptureSource, type QualityPresetName } from '@game-share/shared';
 import { Broadcaster, type BroadcastState } from './broadcast.js';
 
 const broadcaster = new Broadcaster();
@@ -100,6 +100,22 @@ function SourcePanel({ state }: { state: BroadcastState }): React.JSX.Element {
       {windows.length > 0 && <SourceGroup title="Janelas" sources={windows} state={state} />}
 
       <div className="panel__foot">
+        <label className="preset">
+          Qualidade
+          <select
+            value={state.preset}
+            disabled={starting}
+            onChange={(e) => broadcaster.setPreset(e.currentTarget.value as QualityPresetName)}
+          >
+            {Object.values(QUALITY_PRESETS).map((p) => (
+              <option key={p.name} value={p.name}>
+                {p.height}p{p.frameRate}
+                {p.name === '720p30' ? ' (testado)' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <button
           className="btn btn--primary"
           disabled={!state.selectedSourceId || starting}

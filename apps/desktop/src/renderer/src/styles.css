@@ -195,6 +195,33 @@ body {
   background: transparent;
 }
 
+.preset {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.preset select {
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: normal;
+  text-transform: none;
+  padding: 9px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: #0d1117;
+  color: var(--text);
+}
+
+.preset select:disabled {
+  opacity: 0.45;
+}
+
 .live {
   display: flex;
   align-items: center;

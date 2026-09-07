@@ -56,6 +56,20 @@ Consequências:
   uma transmissão não dá acesso a outra.
 - O `roomId` é gerado **no servidor** (`POST /api/rooms` ignora qualquer corpo).
   O cliente nunca escolhe o nome da sala.
+- `POST /api/rooms/:roomId/end` encerra a sala no SFU e usa **o próprio token de
+  publisher como credencial** (`Authorization: Bearer`). Quem só tem o link
+  recebeu um token de viewer, sem `canPublish`, então não consegue derrubar a
+  transmissão de outra pessoa — e não foi preciso guardar estado nenhum para
+  isso. O `roomId` é validado antes de olhar o token.
+
+## Endpoints
+
+| Método | Rota | Quem chama | Autorização |
+| ------ | ---- | ---------- | ----------- |
+| `GET` | `/health` | qualquer um | — |
+| `POST` | `/api/rooms` | desktop | — (o servidor gera o `roomId`) |
+| `POST` | `/api/rooms/:roomId/viewer-token` | viewer | — (conhecer o link basta) |
+| `POST` | `/api/rooms/:roomId/end` | desktop | token de publisher da sala |
 
 ## Identidades
 
@@ -130,11 +144,19 @@ ganha `localhost`/`127.0.0.1` por causa do HMR do Vite.
 
 ## Qualidade
 
-Preset único na V0.1: **720p30**, `simulcast: false`,
-`degradationPreference: 'maintain-framerate'` (para jogo, fps importa mais que
-nitidez). Os presets 1080p30 / 1080p60 / 1440p60 já existem em
-[`packages/shared/src/types.ts`](../packages/shared/src/types.ts) — trocar é
-mudar `DEFAULT_PRESET`. Não foram testados nem otimizados.
+Padrão **720p30**, `simulcast: false`, `degradationPreference:
+'maintain-framerate'` (para jogo, fps importa mais que nitidez). O seletor de
+qualidade na tela de escolha de fonte expõe também 1080p30 / 1080p60 / 1440p60,
+definidos em [`packages/shared/src/types.ts`](../packages/shared/src/types.ts);
+o padrão vem de `DEFAULT_PRESET`. Só o 720p30 foi testado.
+
+O preset é aplicado no momento da captura (`getDisplayMedia` + `videoEncoding`),
+então trocá-lo exige reiniciar a transmissão — o `<select>` fica desabilitado
+depois que ela começa.
+
+**Simulcast fica desligado de propósito.** Ele faria o streamer codificar várias
+camadas simultâneas, gastando CPU que deveria estar no jogo. Para um SFU e
+poucos amigos, camada única é a escolha certa até alguém medir o custo real.
 
 ## Métricas
 

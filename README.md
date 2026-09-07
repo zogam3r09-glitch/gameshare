@@ -211,22 +211,28 @@ o teste ficaria frágil. Esse passo é manual.
 8. Abra o mesmo link numa segunda aba/máquina — o contador de participantes
    deve subir nos dois lados.
 9. **ENCERRAR TRANSMISSÃO** no desktop — o viewer deve mostrar
-   "Transmissão encerrada", não uma tela em branco.
+   "Transmissão encerrada" imediatamente, não uma tela em branco. O desktop
+   desconecta e manda o token-server apagar a sala no SFU, então os
+   espectadores caem na hora em vez de esperar o `emptyTimeout` (5 min).
 
 ---
 
 ## Limitações atuais
 
-- **Só um preset: 720p30.** `1080p30`, `1080p60` e `1440p60` já existem em
-  `packages/shared/src/types.ts`, mas não foram testados nem otimizados.
-- **`simulcast: false`.** Um espectador com internet ruim degrada a experiência
-  de todos. Ligar simulcast é trabalho da v0.2.
+- **Só o preset 720p30 é testado.** Os outros (`1080p30`, `1080p60`, `1440p60`)
+  aparecem no seletor de qualidade, mas ninguém mediu CPU nem latência neles.
+  Só o 720p30 é marcado como "(testado)" na UI.
+- **`simulcast: false`, de propósito.** Simulcast faz o streamer codificar
+  várias camadas ao mesmo tempo — CPU que sai do jogo. Com um SFU e poucos
+  amigos, a camada única é a escolha certa até alguém medir. Ligar sem medir só
+  trocaria um problema por outro.
 - **RTT não é exibido.** `remote-inbound-rtp.roundTripTime` só existe após os
   primeiros relatórios RTCP e some sem assinante; mostrar seria inventar número.
   Bitrate e FPS codificado vêm de `getRTCStatsReport()` (API pública).
-- **Sem persistência.** Salas existem só enquanto alguém está conectado. Um
-  `roomId` bem-formado sempre recebe token de viewer, mesmo que a sala nunca
-  tenha existido — o viewer fica em "Aguardando transmissão…".
+- **Sem persistência.** Um `roomId` bem-formado sempre recebe token de viewer,
+  mesmo que a sala nunca tenha existido — o viewer fica em "Aguardando
+  transmissão…" em vez de "esse link não existe". Distinguir os dois casos
+  exigiria guardar estado, o que está fora da V0.1.
 - **Sem rate limiting** no token-server. Aceitável para localhost; obrigatório
   antes de expor à internet.
 - **`audio: 'loopback'` captura o áudio do sistema inteiro**, não o da janela

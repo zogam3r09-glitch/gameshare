@@ -47,3 +47,21 @@ export async function createRoom(): Promise<CreateRoomResponse> {
 
   return (await res.json()) as CreateRoomResponse;
 }
+
+/**
+ * Encerra a sala no SFU para derrubar os espectadores imediatamente.
+ * Best-effort: se falhar, a sala expira sozinha pelo emptyTimeout do LiveKit,
+ * entao nunca bloqueamos o encerramento local por causa disto.
+ */
+export async function endRoom(roomId: string, publisherToken: string): Promise<boolean> {
+  if (!TOKEN_SERVER_URL) return false;
+  try {
+    const res = await fetch(`${TOKEN_SERVER_URL}/api/rooms/${roomId}/end`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${publisherToken}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
