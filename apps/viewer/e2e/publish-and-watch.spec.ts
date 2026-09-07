@@ -86,7 +86,9 @@ test.describe('publisher -> viewer', () => {
       return;
     }
 
-    const viewer = await (await browser.newContext()).newPage();
+    const viewer = await (
+      await browser.newContext({ viewport: { width: 1920, height: 1080 } })
+    ).newPage();
     await viewer.goto(`/watch/${room.roomId}`);
 
     // O <video> so ganha a classe --on quando a fase e "playing".
@@ -109,6 +111,22 @@ test.describe('publisher -> viewer', () => {
 
     // O publisher nao deve ser contado como espectador.
     await expect(viewer.getByTitle('Espectadores')).toHaveText(/1/);
+
+    // A pagina nunca rola: o video fica travado no tamanho da janela.
+    // Regressao: como item de grid, o <video> crescia ate a altura da propria
+    // proporcao (1080px a 1920 de largura) e empurrava a barra para fora,
+    // gerando 36px de scroll vertical em 1920x1080.
+    await expect
+      .poll(() =>
+        viewer.evaluate(() => {
+          const d = document.documentElement;
+          return { v: d.scrollHeight - d.clientHeight, h: d.scrollWidth - d.clientWidth };
+        }),
+      )
+      .toEqual({ v: 0, h: 0 });
+
+    // E ocupa a tela inteira: a barra flutua por cima, nao rouba altura.
+    expect(await video.boundingBox()).toMatchObject({ width: 1920, height: 1080 });
 
     // Encerramento explicito, exatamente como o botao ENCERRAR TRANSMISSAO do
     // desktop: desconecta e manda encerrar a sala no SFU.

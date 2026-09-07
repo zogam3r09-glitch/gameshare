@@ -28,14 +28,23 @@ body {
 .shell {
   position: relative;
   height: 100%;
-  display: grid;
-  grid-template-rows: 1fr auto;
+  /* o video ocupa a tela inteira; a barra flutua por cima */
+  overflow: hidden;
   background: #000;
 }
 
+.shell--idle {
+  cursor: none;
+}
+
 .stage {
+  display: block;
   width: 100%;
   height: 100%;
+  /* sem isto o <video> cresce ate a altura da propria proporcao (1080px em
+     1920 de largura) e empurra a barra para fora da tela, criando scroll */
+  min-height: 0;
+  min-width: 0;
   object-fit: contain;
   background: #000;
   opacity: 0;
@@ -48,7 +57,7 @@ body {
 
 .overlay {
   position: absolute;
-  inset: 0 0 44px;
+  inset: 0;
   display: grid;
   place-items: center;
   background: var(--bg);
@@ -106,15 +115,26 @@ body {
 }
 
 .bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   height: 44px;
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 0 14px;
-  background: var(--bar);
-  border-top: 1px solid var(--line);
+  background: linear-gradient(to top, rgb(11 13 16 / 94%), rgb(11 13 16 / 55%));
   font-size: 12px;
   color: var(--muted);
+  opacity: 1;
+  transition: opacity 200ms ease;
+}
+
+/* some sozinha durante a transmissao, como em qualquer player */
+.bar--hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .bar__room {

@@ -33,13 +33,43 @@ function Watch({ roomId }: { roomId: string }): React.JSX.Element {
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
 
+  // A barra some depois de um tempo parado para o video ocupar a tela inteira.
+  const [idle, setIdle] = useState(false);
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+
+    let timer: ReturnType<typeof setTimeout>;
+    const wake = (): void => {
+      setIdle(false);
+      clearTimeout(timer);
+      timer = setTimeout(() => setIdle(true), 2500);
+    };
+    const sleep = (): void => {
+      clearTimeout(timer);
+      setIdle(true);
+    };
+
+    wake();
+    shell.addEventListener('mousemove', wake);
+    shell.addEventListener('mouseleave', sleep);
+    return () => {
+      clearTimeout(timer);
+      shell.removeEventListener('mousemove', wake);
+      shell.removeEventListener('mouseleave', sleep);
+    };
+  }, []);
+
+  // so escondemos a barra enquanto o video roda; nos outros estados ela informa
+  const chromeHidden = idle && watch.phase === 'playing';
+
   const toggleFullscreen = (): void => {
     if (document.fullscreenElement) void document.exitFullscreen();
     else void shellRef.current?.requestFullscreen();
   };
 
   return (
-    <div className="shell" ref={shellRef}>
+    <div className={`shell ${chromeHidden ? 'shell--idle' : ''}`} ref={shellRef}>
       <video
         className={`stage ${watch.phase === 'playing' ? 'stage--on' : ''}`}
         ref={watch.videoRef}
@@ -68,7 +98,7 @@ function Watch({ roomId }: { roomId: string }): React.JSX.Element {
         </button>
       )}
 
-      <footer className="bar">
+      <footer className={`bar ${chromeHidden ? 'bar--hidden' : ''}`}>
         <span className="bar__room">{roomId}</span>
 
         <label className="bar__vol" title="Volume">
