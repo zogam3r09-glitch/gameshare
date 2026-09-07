@@ -18,7 +18,18 @@ export default defineConfig({
     baseURL: 'http://localhost:5174',
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          // publisher sintetico: camera/microfone falsos, permissao auto-concedida
+          args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+        },
+      },
+    },
+  ],
   webServer: [
     {
       command: 'pnpm --filter @game-share/token-server start',

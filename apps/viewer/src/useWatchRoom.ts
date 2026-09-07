@@ -6,7 +6,6 @@ import {
   RemoteVideoTrack,
   Room,
   RoomEvent,
-  Track,
 } from 'livekit-client';
 import { createLogger, errorMessage, isPublisherIdentity, isViewerIdentity } from '@game-share/shared';
 import { ViewerApiError, fetchViewerToken } from './api.js';
@@ -31,6 +30,23 @@ export interface WatchState {
   hasAudio: boolean;
   /** o navegador bloqueou o autoplay do audio: precisa de um clique */
   audioBlocked: boolean;
+}
+
+/**
+ * Fase derivada do estado real da sala.
+ *
+ * Nunca dependa da ordem dos eventos: `TrackSubscribed` dispara DURANTE
+ * `room.connect()`, ou seja antes do codigo que roda depois do await. Foi
+ * exatamente isso que travava o viewer em "Aguardando transmissao..." para
+ * sempre — o pos-connect sobrescrevia um `playing` que ja tinha acontecido.
+ */
+export function nextPhase(current: WatchPhase, hasVideo: boolean, hasPublisher: boolean): WatchPhase {
+  if (current === 'error') return current;
+  if (hasVideo) return 'playing';
+  if (hasPublisher) return 'waiting';
+  // sem publisher: so e "encerrada" se a transmissao chegou a rodar
+  if (current === 'playing') return 'ended';
+  return current === 'connecting' ? 'waiting' : current;
 }
 
 const INITIAL: WatchState = {
@@ -91,43 +107,68 @@ export function useWatchRoom(roomId: string): UseWatchRoom {
       return found;
     };
 
+    /**
+     * Anexa tudo que ja esta assinado e recalcula o estado a partir da sala.
+     * Idempotente de proposito: pode ser chamado por qualquer evento, em
+     * qualquer ordem, inclusive depois de `room.connect()` resolver.
+     */
+    const sync = (): void => {
+      let hasVideo = false;
+      let hasAudio = false;
+
+      room.remoteParticipants.forEach((participant) => {
+        participant.trackPublications.forEach((publication) => {
+          const track = publication.track;
+          if (track instanceof RemoteVideoTrack && videoRef.current) {
+            track.attach(videoRef.current);
+            hasVideo = true;
+          } else if (track instanceof RemoteAudioTrack && audioRef.current) {
+            track.attach(audioRef.current);
+            hasAudio = true;
+          }
+        });
+      });
+
+      setState((s) => {
+        const phase = nextPhase(s.phase, hasVideo, hasPublisher());
+        return {
+          ...s,
+          phase,
+          hasAudio,
+          viewers: countViewers(),
+          audioBlocked: !room.canPlaybackAudio,
+          notice: phase === 'playing' ? null : s.notice,
+        };
+      });
+    };
+
     room
       .on(RoomEvent.TrackSubscribed, (track) => {
         log.info('track assinada', { kind: track.kind, source: track.source });
-        if (track instanceof RemoteVideoTrack && videoRef.current) {
-          track.attach(videoRef.current);
-          patch({ phase: 'playing', notice: null });
-        }
-        if (track instanceof RemoteAudioTrack && audioRef.current) {
-          track.attach(audioRef.current);
-          patch({ hasAudio: true });
-        }
+        sync();
       })
       .on(RoomEvent.TrackUnsubscribed, (track) => {
         log.info('track encerrada', { kind: track.kind });
         track.detach();
-        if (track.kind === Track.Kind.Video) {
-          patch({ phase: hasPublisher() ? 'waiting' : 'ended' });
-        }
-        if (track.kind === Track.Kind.Audio) patch({ hasAudio: false });
+        sync();
       })
       .on(RoomEvent.ParticipantConnected, (p) => {
-        if (isPublisherIdentity(p.identity)) patch({ notice: null });
-        patch({ viewers: countViewers() });
+        log.info('participante entrou', { identity: p.identity });
+        sync();
       })
       .on(RoomEvent.ParticipantDisconnected, (p) => {
-        if (isPublisherIdentity(p.identity)) {
-          log.info('streamer saiu');
-          patch({ phase: 'ended' });
-        }
-        patch({ viewers: countViewers() });
+        if (isPublisherIdentity(p.identity)) log.info('streamer saiu');
+        sync();
       })
       .on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
         if (participant.identity === room.localParticipant.identity) patch({ quality });
       })
       .on(RoomEvent.ConnectionStateChanged, (connection) => patch({ connection }))
       .on(RoomEvent.Reconnecting, () => patch({ notice: 'Conexão instável — reconectando…' }))
-      .on(RoomEvent.Reconnected, () => patch({ notice: null, viewers: countViewers() }))
+      .on(RoomEvent.Reconnected, () => {
+        patch({ notice: null });
+        sync();
+      })
       .on(RoomEvent.AudioPlaybackStatusChanged, () =>
         patch({ audioBlocked: !room.canPlaybackAudio }),
       )
@@ -144,11 +185,8 @@ export function useWatchRoom(roomId: string): UseWatchRoom {
         if (cancelled) return;
 
         log.info('conectado', { roomId });
-        patch({
-          phase: hasPublisher() ? 'waiting' : 'waiting',
-          viewers: countViewers(),
-          audioBlocked: !room.canPlaybackAudio,
-        });
+        // as tracks podem ter sido assinadas durante o connect acima
+        sync();
       } catch (err) {
         if (cancelled) return;
         const message =
