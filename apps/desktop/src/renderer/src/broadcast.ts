@@ -206,10 +206,14 @@ export class Broadcaster {
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({
+        // `max`, nao `ideal`: o capturador de tela do Chromium trata `ideal`
+        // como sugestao e ignora. Medido em transmissao real pedindo 720p30
+        // com `ideal`: a captura veio em 1920x1080@60 e o libvpx so conseguiu
+        // codificar ~15fps disso.
         video: {
-          width: { ideal: preset.width },
-          height: { ideal: preset.height },
-          frameRate: { ideal: preset.frameRate, max: preset.frameRate },
+          width: { max: preset.width },
+          height: { max: preset.height },
+          frameRate: { max: preset.frameRate },
         },
         audio: true,
       });
@@ -242,6 +246,25 @@ export class Broadcaster {
      * LocalVideoTrack e construido na mao, entao precisa ser explicito.
      */
     videoMst.contentHint = 'motion';
+
+    // Cinto e suspensorio: mesmo com `max` na requisicao, reaplicamos e
+    // registramos o que ficou valendo de fato. Sem este log o descompasso
+    // entre o pedido e a captura passa despercebido.
+    try {
+      await videoMst.applyConstraints({
+        width: { max: preset.width },
+        height: { max: preset.height },
+        frameRate: { max: preset.frameRate },
+      });
+    } catch (err) {
+      log.warn('applyConstraints falhou na faixa de captura', { message: errorMessage(err) });
+    }
+
+    const settings = videoMst.getSettings();
+    log.info('captura configurada', {
+      pedido: `${preset.width}x${preset.height}@${preset.frameRate}`,
+      real: `${settings.width ?? '?'}x${settings.height ?? '?'}@${settings.frameRate ?? '?'}`,
+    });
 
     const audioMst = stream.getAudioTracks()[0] ?? null;
     if (!audioMst) {
