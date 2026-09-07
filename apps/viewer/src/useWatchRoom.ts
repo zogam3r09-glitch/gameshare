@@ -20,8 +20,32 @@ export type WatchPhase =
   | 'ended'
   | 'error';
 
+/** Metricas do lado que RECEBE. Tudo de getRTCStatsReport (API publica). */
+export interface ReceiveStats {
+  fps: number | null;
+  /** atraso medio do jitter buffer em ms — o principal suspeito de "lag" */
+  jitterBufferMs: number | null;
+  /** atraso de reproducao pedido ao Chromium, em ms */
+  playoutDelayMs: number | null;
+  freezeCount: number | null;
+  freezeMs: number | null;
+  packetsLost: number | null;
+  decoder: string | null;
+}
+
+const EMPTY_RECEIVE: ReceiveStats = {
+  fps: null,
+  jitterBufferMs: null,
+  playoutDelayMs: null,
+  freezeCount: null,
+  freezeMs: null,
+  packetsLost: null,
+  decoder: null,
+};
+
 export interface WatchState {
   phase: WatchPhase;
+  stats: ReceiveStats;
   error: string | null;
   notice: string | null;
   viewers: number;
@@ -51,6 +75,7 @@ export function nextPhase(current: WatchPhase, hasVideo: boolean, hasPublisher: 
 
 const INITIAL: WatchState = {
   phase: 'connecting',
+  stats: EMPTY_RECEIVE,
   error: null,
   notice: null,
   viewers: 0,
@@ -66,11 +91,58 @@ export interface UseWatchRoom extends WatchState {
   enableAudio: () => void;
 }
 
+async function sampleReceive(track: RemoteVideoTrack): Promise<ReceiveStats | null> {
+  let report: RTCStatsReport | undefined;
+  try {
+    report = await track.getRTCStatsReport();
+  } catch {
+    return null;
+  }
+  if (!report) return null;
+
+  const out: ReceiveStats = { ...EMPTY_RECEIVE };
+  try {
+    const delay = track.getPlayoutDelay();
+    if (typeof delay === 'number') out.playoutDelayMs = Math.round(delay * 1000);
+  } catch {
+    // nem todo navegador expoe playoutDelayHint
+  }
+
+  report.forEach((entry) => {
+    const s = entry as RTCStats & {
+      kind?: string;
+      framesPerSecond?: number;
+      jitterBufferDelay?: number;
+      jitterBufferEmittedCount?: number;
+      freezeCount?: number;
+      totalFreezesDuration?: number;
+      packetsLost?: number;
+      decoderImplementation?: string;
+    };
+    if (s.type !== 'inbound-rtp' || s.kind !== 'video') return;
+
+    if (typeof s.framesPerSecond === 'number') out.fps = Math.round(s.framesPerSecond);
+    // jitterBufferDelay e acumulado; dividir pelo contador da a media por quadro
+    if (typeof s.jitterBufferDelay === 'number' && s.jitterBufferEmittedCount) {
+      out.jitterBufferMs = Math.round((s.jitterBufferDelay / s.jitterBufferEmittedCount) * 1000);
+    }
+    if (typeof s.freezeCount === 'number') out.freezeCount = s.freezeCount;
+    if (typeof s.totalFreezesDuration === 'number') {
+      out.freezeMs = Math.round(s.totalFreezesDuration * 1000);
+    }
+    if (typeof s.packetsLost === 'number') out.packetsLost = s.packetsLost;
+    if (typeof s.decoderImplementation === 'string') out.decoder = s.decoderImplementation;
+  });
+
+  return out;
+}
+
 export function useWatchRoom(roomId: string): UseWatchRoom {
   const [state, setState] = useState<WatchState>(INITIAL);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const roomRef = useRef<Room | null>(null);
+  const videoTrackRef = useRef<RemoteVideoTrack | null>(null);
 
   const patch = useCallback((p: Partial<WatchState>) => setState((s) => ({ ...s, ...p })), []);
 
@@ -115,12 +187,14 @@ export function useWatchRoom(roomId: string): UseWatchRoom {
     const sync = (): void => {
       let hasVideo = false;
       let hasAudio = false;
+      videoTrackRef.current = null;
 
       room.remoteParticipants.forEach((participant) => {
         participant.trackPublications.forEach((publication) => {
           const track = publication.track;
           if (track instanceof RemoteVideoTrack && videoRef.current) {
             track.attach(videoRef.current);
+            videoTrackRef.current = track;
             hasVideo = true;
           } else if (track instanceof RemoteAudioTrack && audioRef.current) {
             track.attach(audioRef.current);
@@ -205,6 +279,24 @@ export function useWatchRoom(roomId: string): UseWatchRoom {
       roomRef.current = null;
     };
   }, [roomId, patch]);
+
+  /**
+   * `jitterBufferMs` e o numero que explica "lag do mouse": quanto tempo cada
+   * quadro fica represado antes de ser exibido. O Chromium aumenta esse buffer
+   * sozinho quando ve jitter na rede, trocando latencia por suavidade.
+   */
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const track = videoTrackRef.current;
+      if (!track) return;
+      void sampleReceive(track).then((stats) => {
+        if (!stats) return;
+        setState((s) => ({ ...s, stats }));
+        log.debug('metricas de recepcao', { ...stats });
+      });
+    }, 2000);
+    return () => clearInterval(timer);
+  }, []);
 
   return { ...state, videoRef, audioRef, enableAudio };
 }

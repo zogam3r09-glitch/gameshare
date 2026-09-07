@@ -99,6 +99,35 @@ body {
   }
 }
 
+.debug {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgb(11 13 16 / 88%);
+  border: 1px solid var(--line);
+  font: 11px/1.6 ui-monospace, 'Cascadia Mono', monospace;
+  color: var(--text);
+  pointer-events: none;
+}
+
+.debug > div {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.debug dt {
+  color: var(--muted);
+}
+
+.debug dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 .unmute {
   position: absolute;
   top: 18px;

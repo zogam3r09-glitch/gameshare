@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ConnectionQuality } from 'livekit-client';
 import { parseWatchPath } from '@game-share/shared';
-import { useWatchRoom } from './useWatchRoom.js';
+import { useWatchRoom, type ReceiveStats } from './useWatchRoom.js';
 
 const QUALITY_LABEL: Record<ConnectionQuality, string> = {
   [ConnectionQuality.Excellent]: 'Excelente',
@@ -19,6 +19,7 @@ export function App(): React.JSX.Element {
 
 function Watch({ roomId }: { roomId: string }): React.JSX.Element {
   const watch = useWatchRoom(roomId);
+  const debug = new URLSearchParams(window.location.search).has('debug');
   const shellRef = useRef<HTMLDivElement>(null);
   const [volume, setVolume] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
@@ -92,6 +93,8 @@ function Watch({ roomId }: { roomId: string }): React.JSX.Element {
         </div>
       )}
 
+      {debug && watch.phase === 'playing' && <DebugPanel stats={watch.stats} />}
+
       {watch.audioBlocked && watch.phase === 'playing' && (
         <button className="unmute" onClick={watch.enableAudio}>
           🔊 Clique para ativar o áudio
@@ -130,6 +133,30 @@ function Watch({ roomId }: { roomId: string }): React.JSX.Element {
         </button>
       </footer>
     </div>
+  );
+}
+
+/** Visivel apenas com ?debug=1. Numeros crus, sem interpretacao. */
+function DebugPanel({ stats }: { stats: ReceiveStats }): React.JSX.Element {
+  const rows: [string, string][] = [
+    ['fps recebido', stats.fps !== null ? String(stats.fps) : '—'],
+    ['jitter buffer', stats.jitterBufferMs !== null ? `${stats.jitterBufferMs} ms` : '—'],
+    ['playout delay', stats.playoutDelayMs !== null ? `${stats.playoutDelayMs} ms` : '—'],
+    ['congelamentos', stats.freezeCount !== null ? String(stats.freezeCount) : '—'],
+    ['tempo congelado', stats.freezeMs !== null ? `${stats.freezeMs} ms` : '—'],
+    ['pacotes perdidos', stats.packetsLost !== null ? String(stats.packetsLost) : '—'],
+    ['decoder', stats.decoder ?? '—'],
+  ];
+
+  return (
+    <dl className="debug">
+      {rows.map(([k, v]) => (
+        <div key={k}>
+          <dt>{k}</dt>
+          <dd>{v}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

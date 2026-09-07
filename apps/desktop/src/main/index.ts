@@ -142,7 +142,10 @@ function createWindow(): BrowserWindow {
   const devUrl = process.env.ELECTRON_RENDERER_URL;
   if (isDev && devUrl) {
     void win.loadURL(devUrl);
-    win.webContents.openDevTools({ mode: 'detach' });
+    // NAO abrir o DevTools por padrao: acoplado a um renderer que esta
+    // codificando video em tempo real ele custa caro e falseia qualquer
+    // medicao de performance. Os logs ja vao para o terminal.
+    if (process.env.GAME_SHARE_DEVTOOLS === '1') win.webContents.openDevTools({ mode: 'detach' });
   } else {
     void win.loadFile(join(__dirname, '../renderer/index.html'));
   }
