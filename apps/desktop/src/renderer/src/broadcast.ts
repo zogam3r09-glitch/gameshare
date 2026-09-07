@@ -112,6 +112,7 @@ export class Broadcaster {
   private audioTrack: LocalAudioTrack | null = null;
   private statsTimer: ReturnType<typeof setInterval> | null = null;
   private lastBytesSent: { bytes: number; at: number } | null = null;
+  private statsTick = 0;
 
   subscribe(listener: (s: BroadcastState) => void): () => void {
     this.listeners.add(listener);
@@ -449,6 +450,22 @@ export class Broadcaster {
     }
 
     this.setStats({ encodedFps, videoKbps, encoder, limitedBy, framesDropped });
+
+    // Uma linha a cada ~6s no terminal. Sem isto o diagnostico so existe na
+    // UI, e ninguem consegue reconstruir depois o que aconteceu durante o jogo.
+    if (this.statsTick++ % 4 === 0) {
+      const s = this.state.stats;
+      log.info('metricas', {
+        resolucao: s.width && s.height ? `${s.width}x${s.height}` : null,
+        fpsCaptura: s.captureFps,
+        fpsCodificado: encodedFps,
+        kbps: videoKbps,
+        encoder,
+        gargalo: limitedBy,
+        quadrosPerdidos: framesDropped,
+        espectadores: s.viewers,
+      });
+    }
   }
 
   // -------------------------------------------------------------------------

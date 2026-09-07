@@ -20,6 +20,14 @@ export function redactToken(token: string | null | undefined): string {
   return `${token.slice(0, 6)}…len=${token.length}`;
 }
 
+function stringify(data: Record<string, unknown>): string {
+  try {
+    return JSON.stringify(data);
+  } catch {
+    return '<nao serializavel>';
+  }
+}
+
 export interface Logger {
   debug(msg: string, data?: Record<string, unknown>): void;
   info(msg: string, data?: Record<string, unknown>): void;
@@ -32,8 +40,10 @@ export function createLogger(scope: string): Logger {
     if (ORDER[level] < ORDER[MIN_LEVEL]) return;
     const line = `${new Date().toISOString()} ${level.toUpperCase().padEnd(5)} [${scope}] ${msg}`;
     const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
-    if (data && Object.keys(data).length > 0) fn(line, data);
-    else fn(line);
+    // Serializado numa string unica de proposito: o console do renderer do
+    // Electron e espelhado no terminal como texto, e um segundo argumento
+    // objeto chegaria la como "[object Object]".
+    fn(data && Object.keys(data).length > 0 ? `${line} ${stringify(data)}` : line);
   };
 
   return {
