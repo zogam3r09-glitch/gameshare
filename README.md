@@ -279,13 +279,29 @@ definida **no momento do build**, não só no host.
 
 ### Checklist
 
-- [ ] `LIVEKIT_URL` começa com `wss://` (não `ws://`) — navegador em HTTPS
-      recusa WebSocket inseguro
-- [ ] `ALLOWED_ORIGINS` contém o domínio exato do viewer, com esquema e sem
-      barra final
-- [ ] `VITE_TOKEN_SERVER_URL` aponta para HTTPS
-- [ ] Fallback de SPA funcionando: abrir `/watch/ABCD-EFGH` direto na barra de
-      endereços não pode dar 404
+Os cinco primeiros itens são **verificados sozinhos**: o token-server checa a
+coerência da configuração ao subir e avisa no log. Não precisa decorar nada —
+suba o servidor com o `.env` de produção e leia a saída.
+
+```
+WARN [token-server] configuracao incoerente: VITE_VIEWER_BASE_URL usa https
+     mas LIVEKIT_URL usa ws:// — o navegador recusa WebSocket inseguro numa
+     pagina segura. Use wss://
+```
+
+Cobertos automaticamente:
+
+- `LIVEKIT_URL` em `ws://` com viewer em HTTPS
+- `VITE_TOKEN_SERVER_URL` em `http://` com viewer em HTTPS (conteúdo misto)
+- entrada de `ALLOWED_ORIGINS` com barra final (o header `Origin` nunca tem,
+  então a entrada nunca casa)
+- origem do viewer ausente de `ALLOWED_ORIGINS`
+- `TOKEN_SERVER_HOST=127.0.0.1` com viewer público
+
+Manuais, porque dependem do host:
+
+- [ ] Fallback de SPA: abrir `/watch/ABCD-EFGH` direto na barra de endereços
+      não pode dar 404 (verificado no build local; falta confirmar no host)
 - [ ] Se empacotar o Electron, acrescente `null` a `ALLOWED_ORIGINS` (janela
       em `file://` envia `Origin: null`)
 

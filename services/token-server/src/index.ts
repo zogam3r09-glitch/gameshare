@@ -3,7 +3,11 @@ import { createApp } from './app.js';
 import { loadEnv } from './env.js';
 
 const log = createLogger('token-server');
-const { env, problems } = loadEnv();
+const { env, problems, warnings } = loadEnv();
+
+for (const warning of warnings) {
+  log.warn(`configuracao incoerente: ${warning}`);
+}
 
 if (problems.length > 0) {
   log.warn('LiveKit NAO configurado - /health respondera 503 e a API vai recusar requisicoes', {

@@ -284,6 +284,61 @@ describe('env', () => {
   });
 });
 
+describe('coerencia de configuracao para producao', () => {
+  const remote = (extra: Record<string, string>): string[] =>
+    loadEnv({
+      LIVEKIT_URL: 'wss://x.livekit.cloud',
+      LIVEKIT_API_KEY: API_KEY,
+      LIVEKIT_API_SECRET: API_SECRET,
+      TOKEN_SERVER_HOST: '0.0.0.0',
+      VITE_VIEWER_BASE_URL: 'https://viewer.exemplo.com',
+      VITE_TOKEN_SERVER_URL: 'https://api.exemplo.com',
+      ALLOWED_ORIGINS: 'https://viewer.exemplo.com',
+      ...extra,
+    } as NodeJS.ProcessEnv).warnings;
+
+  it('config remota correta nao gera aviso', () => {
+    expect(remote({})).toEqual([]);
+  });
+
+  it('a config local padrao tambem nao gera aviso', () => {
+    expect(
+      loadEnv({
+        LIVEKIT_URL: 'ws://127.0.0.1:7880',
+        LIVEKIT_API_KEY: API_KEY,
+        LIVEKIT_API_SECRET: API_SECRET,
+        ALLOWED_ORIGINS: 'http://localhost:5173,http://localhost:5174',
+        VITE_VIEWER_BASE_URL: 'http://localhost:5174',
+        VITE_TOKEN_SERVER_URL: 'http://127.0.0.1:8787',
+      } as NodeJS.ProcessEnv).warnings,
+    ).toEqual([]);
+  });
+
+  it('avisa sobre ws:// com viewer em https', () => {
+    expect(remote({ LIVEKIT_URL: 'ws://1.2.3.4:7880' }).join(' ')).toMatch(/wss/);
+  });
+
+  it('avisa sobre token-server em http com viewer em https', () => {
+    expect(remote({ VITE_TOKEN_SERVER_URL: 'http://api.exemplo.com' }).join(' ')).toMatch(
+      /conteudo misto/,
+    );
+  });
+
+  it('avisa sobre origem com barra final', () => {
+    expect(remote({ ALLOWED_ORIGINS: 'https://viewer.exemplo.com/' }).join(' ')).toMatch(
+      /barra final/,
+    );
+  });
+
+  it('avisa quando a origem do viewer nao esta em ALLOWED_ORIGINS', () => {
+    expect(remote({ ALLOWED_ORIGINS: 'https://outro.exemplo.com' }).join(' ')).toMatch(/CORS/);
+  });
+
+  it('avisa sobre escutar so em loopback com viewer publico', () => {
+    expect(remote({ TOKEN_SERVER_HOST: '127.0.0.1' }).join(' ')).toMatch(/0\.0\.0\.0/);
+  });
+});
+
 describe('servidor mal configurado', () => {
   it('/health responde 503 e a API recusa', async () => {
     const { env, problems } = loadEnv({} as NodeJS.ProcessEnv);
