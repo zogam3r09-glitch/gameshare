@@ -37,6 +37,15 @@ export type BroadcastPhase =
   | 'ending'
   | 'error';
 
+/**
+ * Fases em que existe transmissao valendo — o main usa isto para pedir
+ * confirmacao antes de fechar a janela. `ending` conta: ate o SFU confirmar,
+ * ainda ha gente assistindo.
+ */
+function noAr(phase: BroadcastPhase): boolean {
+  return phase === 'live' || phase === 'ending';
+}
+
 export interface LiveStats {
   width: number | null;
   height: number | null;
@@ -167,7 +176,14 @@ export class Broadcaster {
   }
 
   private set(patch: Partial<BroadcastState>): void {
+    const antes = noAr(this.state.phase);
     this.state = { ...this.state, ...patch };
+
+    // Avisa o main so na virada, nao a cada tick de metricas. E aqui, e nao no
+    // caminho feliz do start(), para cobrir tambem erro, queda e teardown.
+    const agora = noAr(this.state.phase);
+    if (agora !== antes) void window.gameShare.setBroadcasting(agora);
+
     for (const l of this.listeners) l(this.state);
   }
 

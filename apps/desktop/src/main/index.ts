@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { app, BrowserWindow, clipboard, ipcMain, session, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell } from 'electron';
 import { createLogger, errorMessage } from '@game-share/shared';
 import {
   armSource,
@@ -91,6 +91,36 @@ function lockDownPermissions(): void {
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => allowPermission(permission));
 }
 
+/**
+ * Ha transmissao no ar? O renderer avisa em toda transicao de fase.
+ *
+ * O main nao consegue deduzir isto sozinho: `isSourceArmed()` so vale na
+ * janelinha entre o clique e o getDisplayMedia resolver, nao durante a
+ * transmissao inteira.
+ */
+let broadcasting = false;
+
+/**
+ * Fechar a janela derruba a transmissao e mata o link que os amigos estao
+ * assistindo — sem aviso nenhum. Aconteceu de verdade: a janela fechou e o
+ * link que eu tinha acabado de mandar virou pagina de "transmissao encerrada".
+ *
+ * Precisa ser sincrono: `close` so pode ser cancelado no proprio handler.
+ */
+function confirmarFechamento(win: BrowserWindow): boolean {
+  const escolhido = dialog.showMessageBoxSync(win, {
+    type: 'warning',
+    buttons: ['Encerrar e fechar', 'Continuar transmitindo'],
+    defaultId: 1,
+    cancelId: 1,
+    title: 'Transmissao no ar',
+    message: 'Voce esta transmitindo agora.',
+    detail: 'Fechar o programa encerra a transmissao e derruba quem estiver assistindo.',
+    noLink: true,
+  });
+  return escolhido === 0;
+}
+
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1040,
@@ -113,6 +143,19 @@ function createWindow(): BrowserWindow {
   });
 
   win.once('ready-to-show', () => win.show());
+
+  // Guarda contra o X acidental. `fechamentoConfirmado` evita cair de novo no
+  // dialogo quando o close() e o nosso proprio, depois do usuario confirmar.
+  let fechamentoConfirmado = false;
+  win.on('close', (event) => {
+    if (!broadcasting || fechamentoConfirmado) return;
+    if (confirmarFechamento(win)) {
+      fechamentoConfirmado = true;
+      return;
+    }
+    log.info('fechamento cancelado pelo usuario: transmissao no ar');
+    event.preventDefault();
+  });
 
   // sem janelas novas e sem navegacao para fora do app
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -174,6 +217,11 @@ function registerIpc(): void {
   });
 
   ipcMain.handle('capture:loopbackSupported', () => isLoopbackAudioAvailable());
+
+  ipcMain.handle('app:setBroadcasting', (_e, live: unknown) => {
+    broadcasting = live === true;
+    log.debug('estado de transmissao informado pelo renderer', { broadcasting });
+  });
 
   ipcMain.handle('shell:copy', (_e, text: unknown) => {
     if (typeof text !== 'string' || text.length > 2048) return false;
