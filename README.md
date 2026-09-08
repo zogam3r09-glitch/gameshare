@@ -326,6 +326,7 @@ INFO [broadcast] metricas {"pedido":"2560x1440@60","resolucao":"1920x1080","fpsC
 | `fpsCodificado` **constante** apesar de mudar a entrada | teto fixo em algum lugar, não falta de CPU |
 | `encoder` | `libvpx`/`openh264` = software; nomes com `MediaFoundation`/`AMF` = GPU |
 | `gargalo` | `cpu`, `bandwidth` ou `none` — mas `none` **não** significa "está tudo bem" |
+| `espectadores: 0` | **descarte a amostra.** Sem assinante o `dynacast` reduz a codificação de propósito; fps e kbps baixos aí não significam nada |
 
 **No viewer**, adicione `?debug=1` à URL para ver fps recebido, jitter buffer,
 congelamentos e pacotes perdidos no canto da tela.

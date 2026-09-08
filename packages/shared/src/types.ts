@@ -39,7 +39,19 @@ export const QUALITY_PRESETS: Record<QualityPresetName, QualityPreset> = {
   '1440p60': { name: '1440p60', width: 2560, height: 1440, frameRate: 60, maxBitrate: 16_000_000 },
 };
 
-export const DEFAULT_PRESET: QualityPresetName = '720p30';
+/**
+ * Padrao em 1080p30, nao 720p30.
+ *
+ * A resolucao do preset e um teto e `max` nunca faz upscale. Numa tela de
+ * 1920x1080 — o caso comum — o 720p30 e o UNICO preset que reduz resolucao,
+ * reescalando para 1280x720 com perda visivel; os demais capturam nativo e
+ * diferem so em fps e bitrate. Ter o 720p30 como padrao entregava a pior
+ * imagem possivel para quem nunca abre o seletor.
+ *
+ * O 720p30 continua existindo: e a opcao certa para um amigo com upload ruim,
+ * onde 2,5 Mbps ja e o limite.
+ */
+export const DEFAULT_PRESET: QualityPresetName = '1080p30';
 
 // ---------------------------------------------------------------------------
 // Contrato HTTP do token-server

@@ -125,6 +125,9 @@ function SourcePanel({ state }: { state: BroadcastState }): React.JSX.Element {
       <div className="panel__foot">
         <label className="preset">
           Qualidade
+          <span className="preset__hint" title="A resolução é um teto: telas menores são capturadas na resolução nativa, sem upscale. Escolher acima da sua tela só aumenta bitrate e FPS.">
+            teto ⓘ
+          </span>
           <select
             value={state.preset}
             disabled={starting}
