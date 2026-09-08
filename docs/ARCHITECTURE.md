@@ -195,9 +195,17 @@ Só API pública do SDK:
 | Estado | `RoomEvent.ConnectionStateChanged` |
 | Espectadores | `room.remoteParticipants` filtrado por prefixo de identidade |
 
-> **TODO (v0.2):** RTT. `remote-inbound-rtp.roundTripTime` só aparece depois
-> dos primeiros relatórios RTCP e some quando não há assinante, então ainda não
-> é um número honesto de exibir. Fica de fora até haver viewer real conectado.
+RTT e banda estimada vêm do par de candidatos ICE em uso
+(`candidate-pair` com `nominated` e `state: "succeeded"`) —
+`currentRoundTripTime` e `availableOutgoingBitrate`. Essa fonte é confiável
+enquanto a conexão existe, ao contrário de `remote-inbound-rtp.roundTripTime`,
+que só aparece depois dos primeiros relatórios RTCP e some sem assinante.
+
+`availableOutgoingBitrate` existe por um motivo concreto: numa sessão real o
+fps codificado caiu para 1 durante ~2,5 minutos **com a captura intacta em 60
+fps**, e sem essa métrica não havia como distinguir colapso do estimador de
+banda de falha do encoder. O SFU não registrou perda nem queda de qualidade na
+mesma janela.
 
 Nenhuma propriedade privada do LiveKit é acessada.
 

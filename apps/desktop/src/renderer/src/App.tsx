@@ -229,6 +229,11 @@ function LivePanel({ state }: { state: BroadcastState }): React.JSX.Element {
         <Stat label="Participantes" value={String(stats.viewers)} />
         <Stat label="Conexão" value={CONNECTION_LABEL[stats.connection]} />
         <Stat label="Qualidade" value={QUALITY_LABEL[stats.quality]} />
+        <Stat label="RTT" value={stats.rttMs !== null ? `${stats.rttMs} ms` : '—'} />
+        <Stat
+          label="Banda estimada"
+          value={stats.availableKbps !== null ? `${stats.availableKbps} kbps` : '—'}
+        />
         <Stat label="Encoder" value={encoderLabel(stats.encoder)} />
         <Stat label="Gargalo" value={LIMIT_LABEL[stats.limitedBy ?? 'none'] ?? stats.limitedBy!} />
         <Stat

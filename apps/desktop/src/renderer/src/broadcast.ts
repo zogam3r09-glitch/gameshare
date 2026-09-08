@@ -46,6 +46,13 @@ export interface LiveStats {
   limitedBy: string | null;
   /** quadros que o encoder deixou cair por nao dar conta */
   framesDropped: number | null;
+  /** estimativa de banda de saida (BWE). Se desaba, o encoder desaba junto. */
+  availableKbps: number | null;
+  /** RTT do par de candidatos ICE em uso */
+  rttMs: number | null;
+  /** pedidos de retransmissao e de keyframe vindos do outro lado */
+  nack: number | null;
+  pli: number | null;
   viewers: number;
   quality: ConnectionQuality;
   connection: ConnectionState;
@@ -75,6 +82,10 @@ const EMPTY_STATS: LiveStats = {
   encoder: null,
   limitedBy: null,
   framesDropped: null,
+  availableKbps: null,
+  rttMs: null,
+  nack: null,
+  pli: null,
   viewers: 0,
   quality: ConnectionQuality.Unknown,
   connection: ConnectionState.Disconnected,
@@ -444,6 +455,10 @@ export class Broadcaster {
     let encoder: string | null = null;
     let limitedBy: string | null = null;
     let framesDropped: number | null = null;
+    let availableKbps: number | null = null;
+    let rttMs: number | null = null;
+    let nack: number | null = null;
+    let pli: number | null = null;
 
     report.forEach((entry) => {
       const s = entry as RTCStats & {
@@ -454,12 +469,35 @@ export class Broadcaster {
         qualityLimitationReason?: string;
         framesSent?: number;
         framesEncoded?: number;
+        nackCount?: number;
+        pliCount?: number;
       };
       if (s.type !== 'outbound-rtp' || s.kind !== 'video') return;
       if (typeof s.framesPerSecond === 'number') encodedFps = Math.round(s.framesPerSecond);
       if (typeof s.bytesSent === 'number') bytesSent = (bytesSent ?? 0) + s.bytesSent;
       if (typeof s.encoderImplementation === 'string') encoder = s.encoderImplementation;
       if (typeof s.qualityLimitationReason === 'string') limitedBy = s.qualityLimitationReason;
+      if (typeof s.nackCount === 'number') nack = s.nackCount;
+      if (typeof s.pliCount === 'number') pli = s.pliCount;
+    });
+
+    // Par ICE em uso: e aqui que mora a estimativa de banda. Um colapso do BWE
+    // derruba o encoder junto, e sem este numero a queda fica sem explicacao —
+    // ja aconteceu por ~2,5min com a captura intacta em 60fps.
+    report.forEach((entry) => {
+      const s = entry as RTCStats & {
+        nominated?: boolean;
+        state?: string;
+        availableOutgoingBitrate?: number;
+        currentRoundTripTime?: number;
+      };
+      if (s.type !== 'candidate-pair' || s.state !== 'succeeded' || !s.nominated) return;
+      if (typeof s.availableOutgoingBitrate === 'number') {
+        availableKbps = Math.round(s.availableOutgoingBitrate / 1000);
+      }
+      if (typeof s.currentRoundTripTime === 'number') {
+        rttMs = Math.round(s.currentRoundTripTime * 1000);
+      }
     });
 
     // quadros capturados que nunca chegaram ao encoder
@@ -480,7 +518,17 @@ export class Broadcaster {
       this.lastBytesSent = { bytes: bytesSent, at: now };
     }
 
-    this.setStats({ encodedFps, videoKbps, encoder, limitedBy, framesDropped });
+    this.setStats({
+      encodedFps,
+      videoKbps,
+      encoder,
+      limitedBy,
+      framesDropped,
+      availableKbps,
+      rttMs,
+      nack,
+      pli,
+    });
 
     // Uma linha a cada ~6s no terminal. Sem isto o diagnostico so existe na
     // UI, e ninguem consegue reconstruir depois o que aconteceu durante o jogo.
@@ -495,6 +543,10 @@ export class Broadcaster {
         kbps: videoKbps,
         encoder,
         gargalo: limitedBy,
+        bweKbps: availableKbps,
+        rttMs,
+        nack,
+        pli,
         quadrosPerdidos: framesDropped,
         espectadores: s.viewers,
       });
