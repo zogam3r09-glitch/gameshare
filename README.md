@@ -217,6 +217,80 @@ o teste ficaria frágil. Esse passo é manual.
 
 ---
 
+## Publicar (um amigo assistindo de outra rede)
+
+Tudo até aqui roda numa máquina só. Para alguém de fora assistir, três peças
+precisam estar acessíveis. O `.env.example` tem o bloco "CENÁRIO 2" pronto.
+
+### 1. LiveKit Cloud
+
+Crie um projeto em <https://cloud.livekit.io>, copie as credenciais em
+**Settings → Keys** e ajuste no `.env`:
+
+```
+LIVEKIT_URL=wss://seu-projeto.livekit.cloud
+LIVEKIT_API_KEY=APIxxxxxxxxxxxx
+LIVEKIT_API_SECRET=<segredo do projeto>
+```
+
+Nenhuma mudança de código: o token-server devolve essa URL aos clientes.
+
+### 2. Token server
+
+Qualquer host de Node serve (Railway, Render, Fly). O comando é
+`pnpm --filter @game-share/token-server start` — ele roda via `tsx`, que por
+isso está em `dependencies`, não em `devDependencies`.
+
+Variáveis obrigatórias no host: as três do LiveKit, mais
+
+```
+TOKEN_SERVER_HOST=0.0.0.0
+ALLOWED_ORIGINS=https://seu-viewer.exemplo.com
+VITE_VIEWER_BASE_URL=https://seu-viewer.exemplo.com
+```
+
+`TOKEN_SERVER_HOST=0.0.0.0` é obrigatório: o padrão `127.0.0.1` só aceita
+conexões locais e o host nunca alcança o processo. A porta vem de `PORT`
+quando `TOKEN_SERVER_PORT` não existe, que é a convenção desses serviços.
+
+Atrás de proxy ou CDN, defina `TRUST_PROXY=1` — sem isso o rate limit enxerga
+um IP só (o do proxy) e limita todos os visitantes juntos.
+
+### 3. Viewer
+
+Site estático:
+
+```bash
+pnpm --filter @game-share/viewer build
+```
+
+Publique `apps/viewer/dist/`. **Precisa de fallback de SPA**, senão
+`/watch/XXXX-XXXX` dá 404 — o caminho não é um arquivo. Já existe um
+`public/_redirects` que Netlify e Cloudflare Pages leem sozinhos. Equivalentes:
+
+| Host | Configuração |
+| ---- | ------------ |
+| Netlify, Cloudflare Pages | `public/_redirects` (já incluído) |
+| Vercel | `{"rewrites":[{"source":"/(.*)","destination":"/index.html"}]}` em `vercel.json` |
+| nginx | `try_files $uri $uri/ /index.html;` |
+
+O build embute `VITE_TOKEN_SERVER_URL`, então essa variável precisa estar
+definida **no momento do build**, não só no host.
+
+### Checklist
+
+- [ ] `LIVEKIT_URL` começa com `wss://` (não `ws://`) — navegador em HTTPS
+      recusa WebSocket inseguro
+- [ ] `ALLOWED_ORIGINS` contém o domínio exato do viewer, com esquema e sem
+      barra final
+- [ ] `VITE_TOKEN_SERVER_URL` aponta para HTTPS
+- [ ] Fallback de SPA funcionando: abrir `/watch/ABCD-EFGH` direto na barra de
+      endereços não pode dar 404
+- [ ] Se empacotar o Electron, acrescente `null` a `ALLOWED_ORIGINS` (janela
+      em `file://` envia `Origin: null`)
+
+---
+
 ## Diagnóstico
 
 Quando a transmissão não estiver fluida, os números vêm antes do palpite.
@@ -273,8 +347,9 @@ nunca o valor absoluto.
   mesmo que a sala nunca tenha existido — o viewer fica em "Aguardando
   transmissão…" em vez de "esse link não existe". Distinguir os dois casos
   exigiria guardar estado, o que está fora da V0.1.
-- **Sem rate limiting** no token-server. Aceitável para localhost; obrigatório
-  antes de expor à internet.
+- **Rate limiting é por processo, em memória.** Suficiente para uma instância;
+  com várias réplicas cada uma conta separado. Escalar exigiria um store
+  compartilhado (Redis), fora do escopo enquanto for uma instância só.
 - **`audio: 'loopback'` captura o áudio do sistema inteiro**, não o da janela
   escolhida. É o que a API do Electron oferece hoje no Windows.
 - **Sem microfone** (por decisão): a call continua no Discord.

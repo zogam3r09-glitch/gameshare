@@ -209,6 +209,81 @@ describe('POST /api/rooms/:roomId/end', () => {
   });
 });
 
+describe('rate limiting', () => {
+  let server: Server;
+  let base: string;
+
+  beforeAll(async () => {
+    const { env } = loadEnv({
+      LIVEKIT_URL: 'ws://127.0.0.1:7880',
+      LIVEKIT_API_KEY: API_KEY,
+      LIVEKIT_API_SECRET: API_SECRET,
+      RATE_LIMIT_ROOMS: '3',
+      RATE_LIMIT_VIEWERS: '5',
+    } as NodeJS.ProcessEnv);
+
+    expect(env.rateLimitRooms).toBe(3);
+    expect(env.rateLimitViewers).toBe(5);
+
+    server = createApp(env, [], { deleteRoom: async () => undefined }).listen(0, '127.0.0.1');
+    await new Promise((resolve) => server.once('listening', resolve));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterAll(() => {
+    server.close();
+  });
+
+  it('bloqueia criacao de sala acima do limite, com 429 e codigo proprio', async () => {
+    const status: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      status.push((await fetch(`${base}/api/rooms`, { method: 'POST' })).status);
+    }
+    // 3 permitidas, o resto barrado
+    expect(status.slice(0, 3)).toEqual([201, 201, 201]);
+    expect(status.slice(3)).toEqual([429, 429]);
+
+    const blocked = await fetch(`${base}/api/rooms`, { method: 'POST' });
+    await expect(blocked.json()).resolves.toMatchObject({ code: 'RATE_LIMITED' });
+  });
+
+  it('viewer-token tem folga maior e limite proprio', async () => {
+    // a rota de salas ja esta estourada; esta ainda responde
+    const first = await fetch(`${base}/api/rooms/${ROOM}/viewer-token`, { method: 'POST' });
+    expect(first.status).toBe(200);
+
+    const status: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      status.push(
+        (await fetch(`${base}/api/rooms/${ROOM}/viewer-token`, { method: 'POST' })).status,
+      );
+    }
+    expect(status.filter((s) => s === 429).length).toBeGreaterThan(0);
+  });
+
+  it('/health nunca e limitado: o monitoramento nao pode ser cortado', async () => {
+    for (let i = 0; i < 10; i++) {
+      expect((await fetch(`${base}/health`)).status).toBe(200);
+    }
+  });
+});
+
+describe('env', () => {
+  it('usa PORT quando TOKEN_SERVER_PORT nao existe (Railway/Render/Fly)', () => {
+    expect(loadEnv({ PORT: '3000' } as NodeJS.ProcessEnv).env.port).toBe(3000);
+  });
+
+  it('TOKEN_SERVER_PORT tem precedencia sobre PORT', () => {
+    expect(
+      loadEnv({ PORT: '3000', TOKEN_SERVER_PORT: '8787' } as NodeJS.ProcessEnv).env.port,
+    ).toBe(8787);
+  });
+
+  it('trust proxy fica desligado por padrao', () => {
+    expect(loadEnv({} as NodeJS.ProcessEnv).env.trustProxy).toBe(0);
+  });
+});
+
 describe('servidor mal configurado', () => {
   it('/health responde 503 e a API recusa', async () => {
     const { env, problems } = loadEnv({} as NodeJS.ProcessEnv);

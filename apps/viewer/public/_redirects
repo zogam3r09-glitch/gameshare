@@ -1,0 +1,4 @@
+# SPA fallback: /watch/XXXX-XXXX nao existe como arquivo, precisa cair no
+# index.html para o React ler o roomId da URL. Sem isto o link do amigo da 404.
+# Formato lido por Netlify e Cloudflare Pages. Para outros hosts, ver o README.
+/*    /index.html   200

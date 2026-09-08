@@ -8,7 +8,7 @@ const TOKEN_SERVER_URL = (import.meta.env.VITE_TOKEN_SERVER_URL as string | unde
 export class ViewerApiError extends Error {
   constructor(
     message: string,
-    readonly kind: 'unreachable' | 'misconfigured' | 'not-found' | 'bad-response',
+    readonly kind: 'unreachable' | 'misconfigured' | 'not-found' | 'rate-limited' | 'bad-response',
   ) {
     super(message);
     this.name = 'ViewerApiError';
@@ -33,6 +33,12 @@ export async function fetchViewerToken(roomId: string): Promise<ViewerTokenRespo
   if (res.status === 400) throw new ViewerApiError('Este link de transmissao e invalido.', 'not-found');
   if (res.status === 503) {
     throw new ViewerApiError('O servidor da transmissao esta indisponivel no momento.', 'misconfigured');
+  }
+  if (res.status === 429) {
+    throw new ViewerApiError(
+      'Muitas tentativas em pouco tempo. Espere alguns minutos e recarregue.',
+      'rate-limited',
+    );
   }
   if (!res.ok) throw new ViewerApiError(`O servidor respondeu ${res.status}.`, 'bad-response');
 

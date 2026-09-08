@@ -1,5 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import {
   buildWatchUrl,
   createLogger,
@@ -57,6 +58,10 @@ export function createApp(env: Env, problems: string[], deps: AppDeps = {}): exp
       ).deleteRoom(roomId));
 
   app.disable('x-powered-by');
+  // Atras de proxy/CDN o IP real vem no X-Forwarded-For. Sem isto o rate limit
+  // veria um IP so e limitaria todo mundo junto. Fica 0 (desligado) por padrao,
+  // porque confiar no header sem proxy na frente e falsificavel.
+  app.set('trust proxy', env.trustProxy);
   app.use(express.json({ limit: '16kb' }));
 
   app.use(
@@ -72,6 +77,28 @@ export function createApp(env: Env, problems: string[], deps: AppDeps = {}): exp
       maxAge: 600,
     }),
   );
+
+  /**
+   * Criar sala e a rota cara: aloca sala no SFU e assina um token de
+   * publisher. Sem limite, um loop simples enche o servidor de salas.
+   * Pedir token de viewer e mais barato e legitimamente mais frequente
+   * (cada espectador pede ao entrar), entao tem folga maior.
+   */
+  const limiter = (max: number): ReturnType<typeof rateLimit> =>
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: max,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      message: { code: 'RATE_LIMITED', error: 'Muitas requisicoes. Tente de novo em alguns minutos.' },
+      handler: (req, res, _next, options) => {
+        log.warn('rate limit atingido', { rota: req.path });
+        res.status(options.statusCode).json(options.message);
+      },
+    });
+
+  const roomsLimiter = limiter(env.rateLimitRooms);
+  const viewersLimiter = limiter(env.rateLimitViewers);
 
   app.get('/health', (_req, res) => {
     const body: HealthResponse = {
@@ -95,7 +122,7 @@ export function createApp(env: Env, problems: string[], deps: AppDeps = {}): exp
   };
 
   /** O roomId e gerado AQUI. O cliente nunca escolhe o nome da sala. */
-  app.post('/api/rooms', requireConfig, (_req, res, next) => {
+  app.post('/api/rooms', roomsLimiter, requireConfig, (_req, res, next) => {
     const roomId = generateRoomId();
     issuePublisherToken({
       apiKey: env.livekitApiKey,
@@ -122,7 +149,7 @@ export function createApp(env: Env, problems: string[], deps: AppDeps = {}): exp
       .catch(next);
   });
 
-  app.post('/api/rooms/:roomId/viewer-token', requireConfig, (req, res, next) => {
+  app.post('/api/rooms/:roomId/viewer-token', viewersLimiter, requireConfig, (req, res, next) => {
     const roomId = normalizeRoomId(String(req.params.roomId ?? ''));
     if (!isValidRoomId(roomId)) {
       log.warn('roomId invalido recusado');

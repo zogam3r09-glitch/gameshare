@@ -17,6 +17,12 @@ export interface Env {
   host: string;
   allowedOrigins: string[];
   viewerBaseUrl: string;
+  /** criacoes de sala por IP, por janela */
+  rateLimitRooms: number;
+  /** pedidos de token de viewer por IP, por janela */
+  rateLimitViewers: number;
+  /** saltos de proxy confiaveis; 0 = nenhum (ver express `trust proxy`) */
+  trustProxy: number;
 }
 
 export interface EnvResult {
@@ -50,8 +56,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): EnvResult {
       livekitApiKey,
       livekitApiSecret,
       tokenTtlSeconds: num(source.TOKEN_TTL_SECONDS, 6 * 60 * 60),
-      port: num(source.TOKEN_SERVER_PORT, 8787),
+      // PORT e a convencao de Railway/Render/Fly, que a injetam sozinhos
+      port: num(source.TOKEN_SERVER_PORT ?? source.PORT, 8787),
       host: source.TOKEN_SERVER_HOST?.trim() || '127.0.0.1',
+      rateLimitRooms: num(source.RATE_LIMIT_ROOMS, 30),
+      rateLimitViewers: num(source.RATE_LIMIT_VIEWERS, 120),
+      trustProxy: Number(source.TRUST_PROXY ?? 0) || 0,
       allowedOrigins: (source.ALLOWED_ORIGINS ?? '')
         .split(',')
         .map((o) => o.trim())

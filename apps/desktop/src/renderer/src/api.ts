@@ -5,7 +5,7 @@ const TOKEN_SERVER_URL = import.meta.env.VITE_TOKEN_SERVER_URL?.replace(/\/$/, '
 export class TokenServerError extends Error {
   constructor(
     message: string,
-    readonly kind: 'unreachable' | 'misconfigured' | 'bad-response',
+    readonly kind: 'unreachable' | 'misconfigured' | 'rate-limited' | 'bad-response',
   ) {
     super(message);
     this.name = 'TokenServerError';
@@ -38,6 +38,13 @@ export async function createRoom(): Promise<CreateRoomResponse> {
     throw new TokenServerError(
       body?.error ?? 'Token server sem configuracao de LiveKit.',
       'misconfigured',
+    );
+  }
+
+  if (res.status === 429) {
+    throw new TokenServerError(
+      'Você criou muitas transmissões em pouco tempo. Espere alguns minutos.',
+      'rate-limited',
     );
   }
 

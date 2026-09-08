@@ -66,6 +66,7 @@ export type ApiErrorCode =
   | 'SERVER_MISCONFIGURED'
   | 'NOT_FOUND'
   | 'UNAUTHORIZED'
+  | 'RATE_LIMITED'
   | 'INTERNAL';
 
 export interface ApiErrorResponse {
