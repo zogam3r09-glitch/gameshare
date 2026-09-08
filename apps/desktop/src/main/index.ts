@@ -198,6 +198,14 @@ function registerIpc(): void {
   });
 }
 
+/**
+ * Depuracao remota em dev. A janela do Electron nao e alcancavel por
+ * ferramentas de navegador, entao sem isto nao existe forma de roteirizar uma
+ * transmissao — util para reproduzir um bug na mesma sequencia duas vezes.
+ * Nunca em producao: abriria uma porta de controle total do renderer.
+ */
+if (isDev) app.commandLine.appendSwitch('remote-debugging-port', '9222');
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {

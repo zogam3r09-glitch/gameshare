@@ -10,6 +10,22 @@ import { Broadcaster, type BroadcastState } from './broadcast.js';
 
 const broadcaster = new Broadcaster();
 
+/**
+ * Ponte de automacao, SOMENTE em dev.
+ *
+ * A janela do Electron nao e controlavel por ferramentas de navegador, entao
+ * sem isto nao ha como roteirizar uma transmissao — nem para teste, nem para
+ * reproduzir um bug na mesma sequencia duas vezes. Com
+ * `--remote-debugging-port`, da para chamar os mesmos metodos que os botoes
+ * chamam.
+ *
+ * Fica atras de import.meta.env.DEV: no build de producao a propriedade nao
+ * existe, entao nao vira superficie de ataque para quem executar o app.
+ */
+if (import.meta.env.DEV) {
+  (globalThis as unknown as { __broadcaster: Broadcaster }).__broadcaster = broadcaster;
+}
+
 const QUALITY_LABEL: Record<ConnectionQuality, string> = {
   [ConnectionQuality.Excellent]: 'Excelente',
   [ConnectionQuality.Good]: 'Boa',
