@@ -224,14 +224,14 @@ Quando a transmissão não estiver fluida, os números vêm antes do palpite.
 **No terminal do desktop**, a cada ~6 s enquanto está no ar:
 
 ```
-INFO [broadcast] captura configurada {"pedido":"1280x720@30","real":"1280x720@30"}
-INFO [broadcast] metricas {"resolucao":"1280x720","fpsCaptura":30,"fpsCodificado":30,
-                           "kbps":2100,"encoder":"libvpx","gargalo":"none",...}
+INFO [broadcast] metricas {"pedido":"2560x1440@60","resolucao":"1920x1080","fpsCaptura":60,
+                           "fpsCodificado":32,"kbps":10160,"encoder":"libvpx","gargalo":"none",...}
 ```
 
 | Campo | O que denuncia |
 | ----- | -------------- |
-| `captura configurada` | `real` diferente de `pedido` = as constraints foram ignoradas |
+| `resolucao` menor que `pedido` | normal: `max` não faz upscale, a tela é o limite |
+| `resolucao` **maior** que `pedido` | as constraints foram ignoradas |
 | `fpsCodificado` ≪ `fpsCaptura` | o encoder não acompanha |
 | `fpsCodificado` **constante** apesar de mudar a entrada | teto fixo em algum lugar, não falta de CPU |
 | `encoder` | `libvpx`/`openh264` = software; nomes com `MediaFoundation`/`AMF` = GPU |

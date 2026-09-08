@@ -260,11 +260,10 @@ export class Broadcaster {
       log.warn('applyConstraints falhou na faixa de captura', { message: errorMessage(err) });
     }
 
-    const settings = videoMst.getSettings();
-    log.info('captura configurada', {
-      pedido: `${preset.width}x${preset.height}@${preset.frameRate}`,
-      real: `${settings.width ?? '?'}x${settings.height ?? '?'}@${settings.frameRate ?? '?'}`,
-    });
+    // Nao logamos getSettings() aqui: antes do primeiro quadro ele devolve a
+    // constraint pedida, nao o que a captura entrega de fato — ja mentiu
+    // dizendo 2560x1440 numa captura que era 1920x1080. O valor real sai na
+    // linha de metricas, junto com o `pedido` para comparacao.
 
     const audioMst = stream.getAudioTracks()[0] ?? null;
     if (!audioMst) {
@@ -487,7 +486,9 @@ export class Broadcaster {
     // UI, e ninguem consegue reconstruir depois o que aconteceu durante o jogo.
     if (this.statsTick++ % 4 === 0) {
       const s = this.state.stats;
+      const wanted = QUALITY_PRESETS[this.state.preset];
       log.info('metricas', {
+        pedido: `${wanted.width}x${wanted.height}@${wanted.frameRate}`,
         resolucao: s.width && s.height ? `${s.width}x${s.height}` : null,
         fpsCaptura: s.captureFps,
         fpsCodificado: encodedFps,
