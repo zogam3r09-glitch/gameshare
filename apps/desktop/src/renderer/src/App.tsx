@@ -226,7 +226,16 @@ function LivePanel({ state }: { state: BroadcastState }): React.JSX.Element {
 
       <dl className="stats">
         <Stat label="Fonte" value={sourceName} />
-        <Stat label="Resolução" value={resolution} />
+        <Stat label="Resolução (captura)" value={resolution} />
+        <Stat
+          label="Resolução (enviada)"
+          value={
+            stats.encodedWidth && stats.encodedHeight
+              ? `${stats.encodedWidth} × ${stats.encodedHeight}` +
+                (stats.width && stats.encodedWidth < stats.width ? ' ⚠ reduzida' : '')
+              : '—'
+          }
+        />
         <Stat label="FPS" value={fps} />
         <Stat label="Bitrate" value={stats.videoKbps !== null ? `${stats.videoKbps} kbps` : '—'} />
         <Stat label="Áudio do sistema" value={stats.hasAudio ? 'Ativo' : 'Sem áudio'} />

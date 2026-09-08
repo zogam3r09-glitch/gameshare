@@ -46,6 +46,14 @@ export interface LiveStats {
   limitedBy: string | null;
   /** quadros que o encoder deixou cair por nao dar conta */
   framesDropped: number | null;
+  /**
+   * Resolucao REALMENTE codificada e enviada, que pode ser menor que a
+   * capturada: com degradationPreference 'maintain-framerate' o WebRTC reduz
+   * resolucao para segurar o framerate, e o viewer reamplia — isso aparece
+   * como blur. `resolucao` sozinha (que vem da captura) esconde esse caso.
+   */
+  encodedWidth: number | null;
+  encodedHeight: number | null;
   /** estimativa de banda de saida (BWE). Se desaba, o encoder desaba junto. */
   availableKbps: number | null;
   /** RTT do par de candidatos ICE em uso */
@@ -86,6 +94,8 @@ const EMPTY_STATS: LiveStats = {
   rttMs: null,
   nack: null,
   pli: null,
+  encodedWidth: null,
+  encodedHeight: null,
   viewers: 0,
   quality: ConnectionQuality.Unknown,
   connection: ConnectionState.Disconnected,
@@ -459,6 +469,8 @@ export class Broadcaster {
     let rttMs: number | null = null;
     let nack: number | null = null;
     let pli: number | null = null;
+    let encodedWidth: number | null = null;
+    let encodedHeight: number | null = null;
 
     report.forEach((entry) => {
       const s = entry as RTCStats & {
@@ -471,6 +483,8 @@ export class Broadcaster {
         framesEncoded?: number;
         nackCount?: number;
         pliCount?: number;
+        frameWidth?: number;
+        frameHeight?: number;
       };
       if (s.type !== 'outbound-rtp' || s.kind !== 'video') return;
       if (typeof s.framesPerSecond === 'number') encodedFps = Math.round(s.framesPerSecond);
@@ -479,6 +493,8 @@ export class Broadcaster {
       if (typeof s.qualityLimitationReason === 'string') limitedBy = s.qualityLimitationReason;
       if (typeof s.nackCount === 'number') nack = s.nackCount;
       if (typeof s.pliCount === 'number') pli = s.pliCount;
+      if (typeof s.frameWidth === 'number') encodedWidth = s.frameWidth;
+      if (typeof s.frameHeight === 'number') encodedHeight = s.frameHeight;
     });
 
     // Par ICE em uso: e aqui que mora a estimativa de banda. Um colapso do BWE
@@ -528,6 +544,8 @@ export class Broadcaster {
       rttMs,
       nack,
       pli,
+      encodedWidth,
+      encodedHeight,
     });
 
     // Uma linha a cada ~6s no terminal. Sem isto o diagnostico so existe na
@@ -537,7 +555,9 @@ export class Broadcaster {
       const wanted = QUALITY_PRESETS[this.state.preset];
       log.info('metricas', {
         pedido: `${wanted.width}x${wanted.height}@${wanted.frameRate}`,
-        resolucao: s.width && s.height ? `${s.width}x${s.height}` : null,
+        capturado: s.width && s.height ? `${s.width}x${s.height}` : null,
+        // se for menor que `capturado`, o encoder reduziu para segurar o fps
+        codificado: encodedWidth && encodedHeight ? `${encodedWidth}x${encodedHeight}` : null,
         fpsCaptura: s.captureFps,
         fpsCodificado: encodedFps,
         kbps: videoKbps,
