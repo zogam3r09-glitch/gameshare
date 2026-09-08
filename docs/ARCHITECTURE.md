@@ -150,9 +150,32 @@ qualidade na tela de escolha de fonte expõe também 1080p30 / 1080p60 / 1440p60
 definidos em [`packages/shared/src/types.ts`](../packages/shared/src/types.ts);
 o padrão vem de `DEFAULT_PRESET`. Só o 720p30 foi testado.
 
-O preset é aplicado no momento da captura (`getDisplayMedia` + `videoEncoding`),
-então trocá-lo exige reiniciar a transmissão — o `<select>` fica desabilitado
-depois que ela começa.
+O preset é aplicado no momento da captura, então trocá-lo exige reiniciar a
+transmissão — o `<select>` fica desabilitado depois que ela começa.
+
+### Duas armadilhas que custaram caro
+
+Ambas silenciosas: nenhuma gera erro, e o `qualityLimitationReason` do WebRTC
+reportava `"none"` durante as duas.
+
+**1. `getDisplayMedia` ignora constraints `ideal`.** Uma webcam negocia com
+`ideal`; o capturador de tela do Chromium trata como sugestão. Pedindo
+`{ width: { ideal: 1280 } }` numa tela 1080p, a captura vinha 1920×1080@60. Por
+isso as constraints usam `max`, com `applyConstraints` reaplicando e um log
+`captura configurada` comparando pedido × realidade.
+
+Consequência de projeto: `max` nunca faz upscale, então **a resolução do preset
+é um teto**. Em telas menores que o preset, o que muda de fato é bitrate e fps.
+
+**2. Para `Track.Source.ScreenShare`, o livekit-client lê
+`screenShareEncoding` e ignora `videoEncoding`.** O padrão é
+`ScreenSharePresets.h1080fps15` — teto de **15 fps**. Um `videoEncoding` com
+`maxFramerate: 30` é aceito sem reclamar e não tem efeito nenhum.
+
+O sintoma que denunciou: o fps codificado era *constante* (~15) mesmo quando a
+entrada caiu de 60 para 30 fps. Limite de CPU escala com a carga; teto fixo não.
+Há um e2e que trava isso lendo
+`sender.getParameters().encodings[0].maxFramerate`.
 
 **Simulcast fica desligado de propósito.** Ele faria o streamer codificar várias
 camadas simultâneas, gastando CPU que deveria estar no jogo. Para um SFU e

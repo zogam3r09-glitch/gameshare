@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ConnectionQuality, ConnectionState } from 'livekit-client';
-import { QUALITY_PRESETS, type CaptureSource, type QualityPresetName } from '@game-share/shared';
+import {
+  DEFAULT_PRESET,
+  QUALITY_PRESETS,
+  type CaptureSource,
+  type QualityPresetName,
+} from '@game-share/shared';
 import { Broadcaster, type BroadcastState } from './broadcast.js';
 
 const broadcaster = new Broadcaster();
@@ -125,10 +130,11 @@ function SourcePanel({ state }: { state: BroadcastState }): React.JSX.Element {
             disabled={starting}
             onChange={(e) => broadcaster.setPreset(e.currentTarget.value as QualityPresetName)}
           >
+            {/* a resolucao e um teto: numa tela menor o ganho vem do bitrate */}
             {Object.values(QUALITY_PRESETS).map((p) => (
               <option key={p.name} value={p.name}>
-                {p.height}p{p.frameRate}
-                {p.name === '720p30' ? ' (testado)' : ''}
+                até {p.height}p{p.frameRate} · {Math.round(p.maxBitrate / 100_000) / 10} Mbps
+                {p.name === DEFAULT_PRESET ? ' (padrão)' : ''}
               </option>
             ))}
           </select>

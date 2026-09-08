@@ -217,11 +217,51 @@ o teste ficaria frágil. Esse passo é manual.
 
 ---
 
+## Diagnóstico
+
+Quando a transmissão não estiver fluida, os números vêm antes do palpite.
+
+**No terminal do desktop**, a cada ~6 s enquanto está no ar:
+
+```
+INFO [broadcast] captura configurada {"pedido":"1280x720@30","real":"1280x720@30"}
+INFO [broadcast] metricas {"resolucao":"1280x720","fpsCaptura":30,"fpsCodificado":30,
+                           "kbps":2100,"encoder":"libvpx","gargalo":"none",...}
+```
+
+| Campo | O que denuncia |
+| ----- | -------------- |
+| `captura configurada` | `real` diferente de `pedido` = as constraints foram ignoradas |
+| `fpsCodificado` ≪ `fpsCaptura` | o encoder não acompanha |
+| `fpsCodificado` **constante** apesar de mudar a entrada | teto fixo em algum lugar, não falta de CPU |
+| `encoder` | `libvpx`/`openh264` = software; nomes com `MediaFoundation`/`AMF` = GPU |
+| `gargalo` | `cpu`, `bandwidth` ou `none` — mas `none` **não** significa "está tudo bem" |
+
+**No viewer**, adicione `?debug=1` à URL para ver fps recebido, jitter buffer,
+congelamentos e pacotes perdidos no canto da tela.
+
+**Sonda automatizada**, que mede fonte → encoder → receptor na mesma corrida:
+
+```bash
+pnpm --filter @game-share/viewer exec playwright test latency-probe
+```
+
+Ela imprime `fonteFps` de propósito: a canvas do teste é limitada pelo Chromium
+em aba de segundo plano, então o que importa é a **diferença entre os estágios**,
+nunca o valor absoluto.
+
+---
+
 ## Limitações atuais
 
-- **Só o preset 720p30 é testado.** Os outros (`1080p30`, `1080p60`, `1440p60`)
-  aparecem no seletor de qualidade, mas ninguém mediu CPU nem latência neles.
-  Só o 720p30 é marcado como "(testado)" na UI.
+- **O número do preset é um teto, não um alvo.** As constraints usam `max`, e
+  `max` nunca faz upscale. Numa tela 1920×1080, escolher `1440p60` **não** dá
+  1440p: dá a resolução nativa 1080p com o bitrate e o framerate daquele preset
+  (10 Mbps / 60 fps em vez de 2,5 Mbps / 30 fps). Foi assim que a perda de
+  qualidade percebida sumiu nos testes — o ganho veio de bitrate, não de pixels.
+- **Nada foi testado em jogo ainda.** Área de trabalho e janelas comuns rodam
+  fluidas em 720p30 e em 1440p60. Jogo em movimento pesado é outro regime: o
+  encoder é `libvpx` (software), e é onde ele pode não acompanhar.
 - **`simulcast: false`, de propósito.** Simulcast faz o streamer codificar
   várias camadas ao mesmo tempo — CPU que sai do jogo. Com um SFU e poucos
   amigos, a camada única é a escolha certa até alguém medir. Ligar sem medir só
