@@ -115,7 +115,11 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): EnvResult {
     // PORT e a convencao de Railway/Render/Fly, que a injetam sozinhos
     port: num(source.TOKEN_SERVER_PORT ?? source.PORT, 8787),
     host: source.TOKEN_SERVER_HOST?.trim() || '127.0.0.1',
-    rateLimitRooms: num(source.RATE_LIMIT_ROOMS, 30),
+    // 10, nao 30: criar sala e a unica rota que consome cota do LiveKit e nao
+    // exige credencial nenhuma. Com a API publica, o rate limit e a UNICA
+    // barreira real — CORS nao vale para quem nao usa navegador. Dez
+    // transmissoes em 15 minutos ja e muito para uso legitimo.
+    rateLimitRooms: num(source.RATE_LIMIT_ROOMS, 10),
     rateLimitViewers: num(source.RATE_LIMIT_VIEWERS, 120),
     trustProxy: Number(source.TRUST_PROXY ?? 0) || 0,
     allowedOrigins: (source.ALLOWED_ORIGINS ?? '')

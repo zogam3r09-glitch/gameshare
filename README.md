@@ -359,6 +359,47 @@ Manuais, porque dependem do host:
 
 ---
 
+## Segurança
+
+O token-server está exposto na internet. O modelo de ameaça mudou quando ele
+foi publicado, então vale ser explícito sobre o que protege o quê.
+
+### O que está protegido
+
+| | como |
+| --- | --- |
+| `LIVEKIT_API_SECRET` | nunca sai do servidor; verificado ausente dos bundles e do histórico do git |
+| permissões do espectador | o token de viewer não tem `canPublish`; o SFU rejeita quem tentar |
+| encerrar transmissão alheia | `/end` exige o token de **publisher** daquela sala |
+| escopo do token | cada token vale para **uma** sala (`room` no grant) |
+| código do link | 40 bits aleatórios, sem contador incremental |
+
+### O que NÃO está protegido
+
+**Qualquer pessoa pode criar salas.** `POST /api/rooms` não exige credencial
+alguma. Verificado contra o servidor publicado — um `curl` cria sala
+normalmente, com ou sem `Origin` forjada.
+
+**CORS não é autorização.** `ALLOWED_ORIGINS` só impede que uma *página web de
+outro domínio* chame a API pelo navegador. Não faz nada contra `curl`, script
+ou qualquer cliente que não seja navegador. Eu tratei isso como proteção em
+partes anteriores da documentação, e estava errado.
+
+**A única barreira real é o rate limit** — 10 criações de sala por IP a cada
+15 min, em memória, por instância. Alguém com vários IPs consegue passar e
+consumir a cota do LiveKit Cloud.
+
+### O que resolveria
+
+Contas (V0.6). Não como funcionalidade de produto, mas porque é o que permite
+amarrar a criação de sala a alguém identificável — hoje não há nada para
+amarrar. Enquanto o token-server for aberto, o rate limit é paliativo.
+
+Para um POC compartilhado entre amigos, com link não listado, o risco é
+aceitável. Antes de divulgar o link publicamente, não é.
+
+---
+
 ## Diagnóstico
 
 Quando a transmissão não estiver fluida, os números vêm antes do palpite.
