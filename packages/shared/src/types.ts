@@ -192,6 +192,8 @@ export type ApiErrorCode =
   | 'NOT_FOUND'
   | 'UNAUTHORIZED'
   | 'RATE_LIMITED'
+  /** a sala existiu e o streamer ja encerrou */
+  | 'ROOM_ENDED'
   | 'INTERNAL';
 
 export interface ApiErrorResponse {

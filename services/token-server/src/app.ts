@@ -17,6 +17,7 @@ import {
 } from '@game-share/shared';
 import { RoomServiceClient } from 'livekit-server-sdk';
 import type { Env } from './env.js';
+import { RoomRegistry } from './rooms.js';
 import { isPublisherOf, issuePublisherToken, issueViewerToken } from './tokens.js';
 
 const log = createLogger('token-server');
@@ -42,11 +43,15 @@ function bearer(req: Request): string | null {
 export interface AppDeps {
   /** Injetavel para os testes rodarem sem um LiveKit de verdade. */
   deleteRoom?: (roomId: string) => Promise<void>;
+  /** Injetavel para os testes controlarem expiracao sem esperar. */
+  registry?: RoomRegistry;
 }
 
 export function createApp(env: Env, problems: string[], deps: AppDeps = {}): express.Express {
   const app = express();
   const configured = problems.length === 0;
+
+  const registry = deps.registry ?? new RoomRegistry();
 
   const deleteRoom =
     deps.deleteRoom ??
@@ -131,10 +136,12 @@ export function createApp(env: Env, problems: string[], deps: AppDeps = {}): exp
       ttlSeconds: env.tokenTtlSeconds,
     })
       .then((issued) => {
+        registry.create(roomId);
         log.info('sala criada', {
           roomId,
           identity: issued.identity,
           token: redactToken(issued.token),
+          salasLembradas: registry.size(),
         });
         const body: CreateRoomResponse = {
           roomId,
@@ -154,6 +161,16 @@ export function createApp(env: Env, problems: string[], deps: AppDeps = {}): exp
     if (!isValidRoomId(roomId)) {
       log.warn('roomId invalido recusado');
       fail(res, 400, { code: 'INVALID_ROOM_ID', error: 'Codigo de sala invalido.' });
+      return;
+    }
+
+    // Sala desconhecida continua recebendo token de proposito: o processo pode
+    // ter reiniciado com a transmissao no ar. So recusamos o que sabemos ter
+    // terminado. Ver o comentario em RoomRegistry.
+    const known = registry.get(roomId);
+    if (known?.endedAt !== null && known !== null) {
+      log.info('token recusado: sala ja encerrada', { roomId });
+      fail(res, 410, { code: 'ROOM_ENDED', error: 'Esta transmissao ja foi encerrada.' });
       return;
     }
 
@@ -209,6 +226,8 @@ export function createApp(env: Env, problems: string[], deps: AppDeps = {}): exp
           });
           return;
         }
+
+        registry.markEnded(roomId);
 
         let deleted = true;
         try {

@@ -263,6 +263,15 @@ export function useWatchRoom(roomId: string): UseWatchRoom {
         sync();
       } catch (err) {
         if (cancelled) return;
+
+        // "ja encerrada" nao e erro: e o mesmo desfecho de quem estava
+        // assistindo quando o streamer parou, e merece a mesma tela.
+        if (err instanceof ViewerApiError && err.kind === 'ended') {
+          log.info('sala ja encerrada quando o link foi aberto', { roomId });
+          patch({ phase: 'ended' });
+          return;
+        }
+
         const message =
           err instanceof ViewerApiError
             ? err.message

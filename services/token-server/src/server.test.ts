@@ -127,6 +127,60 @@ describe('HTTP', () => {
   });
 });
 
+describe('sala encerrada rejeita novos espectadores', () => {
+  let server: Server;
+  let base: string;
+
+  beforeAll(async () => {
+    const { env } = loadEnv({
+      LIVEKIT_URL: 'ws://127.0.0.1:7880',
+      LIVEKIT_API_KEY: API_KEY,
+      LIVEKIT_API_SECRET: API_SECRET,
+    } as NodeJS.ProcessEnv);
+
+    server = createApp(env, [], { deleteRoom: async () => undefined }).listen(0, '127.0.0.1');
+    await new Promise((resolve) => server.once('listening', resolve));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterAll(() => {
+    server.close();
+  });
+
+  it('antes de encerrar entrega token; depois responde 410', async () => {
+    const created = (await (await fetch(`${base}/api/rooms`, { method: 'POST' })).json()) as {
+      roomId: string;
+      token: string;
+    };
+
+    const antes = await fetch(`${base}/api/rooms/${created.roomId}/viewer-token`, {
+      method: 'POST',
+    });
+    expect(antes.status).toBe(200);
+
+    await fetch(`${base}/api/rooms/${created.roomId}/end`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${created.token}` },
+    });
+
+    const depois = await fetch(`${base}/api/rooms/${created.roomId}/viewer-token`, {
+      method: 'POST',
+    });
+    expect(depois.status).toBe(410);
+    await expect(depois.json()).resolves.toMatchObject({ code: 'ROOM_ENDED' });
+  });
+
+  /**
+   * Regressao importante: o processo pode reiniciar com a transmissao no ar -
+   * no plano gratuito do Render ele dorme apos 15 min sem trafego. Se sala
+   * desconhecida virasse 404, todo link ativo quebraria no despertar.
+   */
+  it('sala desconhecida continua recebendo token', async () => {
+    const res = await fetch(`${base}/api/rooms/WXYZ-2345/viewer-token`, { method: 'POST' });
+    expect(res.status).toBe(200);
+  });
+});
+
 describe('livekitHttpUrl', () => {
   it('converte o esquema mantendo host e porta', () => {
     expect(livekitHttpUrl('ws://127.0.0.1:7880')).toBe('http://127.0.0.1:7880');
