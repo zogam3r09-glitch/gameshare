@@ -34,8 +34,24 @@ export type BroadcastPhase =
 export interface LiveStats {
   width: number | null;
   height: number | null;
-  /** fps pedido/entregue pela captura (getSettings) */
+  /**
+   * fps CONFIGURADO na faixa (getSettings). Nao e medicao: devolve o que foi
+   * pedido, mesmo que a captura entregue menos. Nao use para diagnostico.
+   */
   captureFps: number | null;
+  /**
+   * fps REAL produzido pela fonte (media-source). Este e medido.
+   * Se bater com `encodedFps`, o encoder nao esta perdendo nada e o limite
+   * esta na captura; se for bem maior, ai sim o gargalo e a codificacao.
+   */
+  sourceFps: number | null;
+  /**
+   * Segundos acumulados em cada motivo de limitacao. Responde de forma
+   * definitiva se ha limite de CPU, sem depender do qualityLimitationReason
+   * instantaneo, que reporta "none" com frequencia enganosa.
+   */
+  limitedByCpuSeconds: number | null;
+  limitedByBandwidthSeconds: number | null;
   /** fps realmente codificado e enviado (RTCStats publico); null se indisponivel */
   encodedFps: number | null;
   /** kbps de video calculado por delta de bytesSent; null antes da 2a amostra */
@@ -85,6 +101,9 @@ const EMPTY_STATS: LiveStats = {
   width: null,
   height: null,
   captureFps: null,
+  sourceFps: null,
+  limitedByCpuSeconds: null,
+  limitedByBandwidthSeconds: null,
   encodedFps: null,
   videoKbps: null,
   encoder: null,
@@ -471,6 +490,9 @@ export class Broadcaster {
     let pli: number | null = null;
     let encodedWidth: number | null = null;
     let encodedHeight: number | null = null;
+    let sourceFps: number | null = null;
+    let limitedByCpuSeconds: number | null = null;
+    let limitedByBandwidthSeconds: number | null = null;
 
     report.forEach((entry) => {
       const s = entry as RTCStats & {
@@ -485,6 +507,7 @@ export class Broadcaster {
         pliCount?: number;
         frameWidth?: number;
         frameHeight?: number;
+        qualityLimitationDurations?: Record<string, number>;
       };
       if (s.type !== 'outbound-rtp' || s.kind !== 'video') return;
       if (typeof s.framesPerSecond === 'number') encodedFps = Math.round(s.framesPerSecond);
@@ -495,6 +518,11 @@ export class Broadcaster {
       if (typeof s.pliCount === 'number') pli = s.pliCount;
       if (typeof s.frameWidth === 'number') encodedWidth = s.frameWidth;
       if (typeof s.frameHeight === 'number') encodedHeight = s.frameHeight;
+      if (s.qualityLimitationDurations) {
+        const d = s.qualityLimitationDurations;
+        if (typeof d.cpu === 'number') limitedByCpuSeconds = Math.round(d.cpu);
+        if (typeof d.bandwidth === 'number') limitedByBandwidthSeconds = Math.round(d.bandwidth);
+      }
     });
 
     // Par ICE em uso: e aqui que mora a estimativa de banda. Um colapso do BWE
@@ -516,12 +544,18 @@ export class Broadcaster {
       }
     });
 
-    // quadros capturados que nunca chegaram ao encoder
+    // A FONTE: quantos quadros a captura realmente produz, e quantos se perdem
+    // antes do encoder. `getSettings().frameRate` nao serve aqui — devolve o
+    // valor pedido, nao o entregue.
     report.forEach((entry) => {
-      const s = entry as RTCStats & { kind?: string; framesDropped?: number };
-      if (s.type === 'media-source' && s.kind === 'video' && typeof s.framesDropped === 'number') {
-        framesDropped = s.framesDropped;
-      }
+      const s = entry as RTCStats & {
+        kind?: string;
+        framesDropped?: number;
+        framesPerSecond?: number;
+      };
+      if (s.type !== 'media-source' || s.kind !== 'video') return;
+      if (typeof s.framesDropped === 'number') framesDropped = s.framesDropped;
+      if (typeof s.framesPerSecond === 'number') sourceFps = Math.round(s.framesPerSecond);
     });
 
     let videoKbps: number | null = this.state.stats.videoKbps;
@@ -546,6 +580,9 @@ export class Broadcaster {
       pli,
       encodedWidth,
       encodedHeight,
+      sourceFps,
+      limitedByCpuSeconds,
+      limitedByBandwidthSeconds,
     });
 
     // Uma linha a cada ~6s no terminal. Sem isto o diagnostico so existe na
@@ -558,8 +595,12 @@ export class Broadcaster {
         capturado: s.width && s.height ? `${s.width}x${s.height}` : null,
         // se for menor que `capturado`, o encoder reduziu para segurar o fps
         codificado: encodedWidth && encodedHeight ? `${encodedWidth}x${encodedHeight}` : null,
-        fpsCaptura: s.captureFps,
+        // fpsPedido e configuracao; fpsFonte e o que a captura entrega de fato
+        fpsPedido: s.captureFps,
+        fpsFonte: sourceFps,
         fpsCodificado: encodedFps,
+        segLimitadoCpu: limitedByCpuSeconds,
+        segLimitadoBanda: limitedByBandwidthSeconds,
         kbps: videoKbps,
         encoder,
         gargalo: limitedBy,

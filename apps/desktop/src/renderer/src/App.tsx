@@ -211,12 +211,11 @@ function LivePanel({ state }: { state: BroadcastState }): React.JSX.Element {
   };
 
   const resolution = stats.width && stats.height ? `${stats.width} × ${stats.height}` : '—';
+  // fonte → encoder, para dar para ver de onde o fps some
   const fps =
     stats.encodedFps !== null
-      ? `${stats.encodedFps} fps`
-      : stats.captureFps !== null
-        ? `${stats.captureFps} fps (captura)`
-        : '—';
+      ? `${stats.sourceFps ?? '?'} → ${stats.encodedFps} fps`
+      : '—';
 
   return (
     <section className="panel">
@@ -252,7 +251,15 @@ function LivePanel({ state }: { state: BroadcastState }): React.JSX.Element {
                 : '—'
             }
           />
-          <Stat label="FPS" value={fps} />
+          <Stat label="FPS (fonte → enviado)" value={fps} />
+          <Stat
+            label="Tempo limitado"
+            value={
+              stats.limitedByCpuSeconds === null
+                ? '—'
+                : `CPU ${stats.limitedByCpuSeconds}s · banda ${stats.limitedByBandwidthSeconds ?? 0}s`
+            }
+          />
           <Stat label="Bitrate" value={stats.videoKbps !== null ? `${stats.videoKbps} kbps` : '—'} />
           <Stat label="Preset" value={state.preset} />
           <Stat label="Estado" value={CONNECTION_LABEL[stats.connection]} />

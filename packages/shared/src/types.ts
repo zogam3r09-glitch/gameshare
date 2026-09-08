@@ -32,10 +32,18 @@ export interface QualityPreset {
 }
 
 /**
- * Teto pratico medido nesta maquina (AMD RX 6700, encoder libvpx por software):
- * ~32 fps a 1920x1080, ou seja cerca de 124 milhoes de pixels por segundo.
- * Presets acima disso entram na lista, mas com aviso — a alternativa seria
- * escondê-los e deixar o usuario descobrir sozinho por que trava.
+ * Teto pratico OBSERVADO nesta maquina: ~32 fps a 1920x1080, ou seja cerca de
+ * 124 milhoes de pixels por segundo. Presets acima disso entram na lista, mas
+ * com aviso — esconde-los deixaria o usuario descobrir sozinho por que trava.
+ *
+ * ATENCAO: a CAUSA nao esta estabelecida. Chamar isso de "limite do encoder
+ * por software" foi conclusao apressada minha, e ha evidencia contra:
+ * qualityLimitationReason reporta "none" em todas as amostras, e a maquina e
+ * um Ryzen 7 5700X, que nao deveria empacar em 1080p. A hipotese concorrente e
+ * o proprio capturador de tela nao produzir 60 quadros — o `fpsCaptura` antigo
+ * vinha de getSettings(), que devolve o valor PEDIDO, nao o entregue.
+ * A instrumentacao de fpsFonte e qualityLimitationDurations existe para
+ * responder isso. Ate la, o numero e descritivo, nao explicativo.
  */
 export const SOFTWARE_ENCODER_PIXELS_PER_SECOND = 124_000_000;
 
@@ -100,7 +108,7 @@ export const QUALITY_PRESETS: Record<QualityPresetName, QualityPreset> = {
     height: 1080,
     frameRate: 60,
     maxBitrate: 9_000_000,
-    warning: '~metade dos quadros por software',
+    warning: 'entrega ~metade dos quadros',
   },
   /**
    * 16 Mbps e um EXPERIMENTO, nao um numero calibrado.
@@ -117,7 +125,7 @@ export const QUALITY_PRESETS: Record<QualityPresetName, QualityPreset> = {
     height: 1440,
     frameRate: 60,
     maxBitrate: 16_000_000,
-    warning: '~metade dos quadros por software',
+    warning: 'entrega ~metade dos quadros',
   },
   // 249 Mpx/s — o dobro do teto medido
   '4k30': {
