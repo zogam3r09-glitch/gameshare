@@ -57,6 +57,22 @@ describe('presets de qualidade', () => {
   });
 
   /**
+   * A ordem do mapa e a ordem do seletor, e ela sobe por pixels por segundo —
+   * cada entrada tem o seu valor no comentario. Um preset inserido no lugar
+   * errado nao quebra nada tecnicamente, mas deixa a lista fora de ordem para
+   * quem escolhe. `<=` e nao `<` porque dois presets podem legitimamente ter
+   * a mesma carga (4k30 e 1080p120 tinham 248,8 Mpx/s identicos).
+   */
+  it('o seletor sobe em pixels por segundo', () => {
+    const cargas = presets.map(([, p]) => pixelsPerSecond(p));
+    for (let i = 1; i < cargas.length; i++) {
+      expect(cargas[i]!, `${presets[i]![0]} vem depois de ${presets[i - 1]![0]}`).toBeGreaterThanOrEqual(
+        cargas[i - 1]!,
+      );
+    }
+  });
+
+  /**
    * Regressao do bug de qualidade: o padrao era 720p30, o unico preset que
    * reduz resolucao numa tela 1080p, entao quem nunca abria o seletor recebia
    * a pior imagem possivel.

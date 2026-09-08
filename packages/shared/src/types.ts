@@ -10,7 +10,9 @@ export interface CaptureSource {
 
 export type QualityPresetName =
   | '720p30'
+  | '900p30'
   | '720p60'
+  | '900p60'
   | '1080p30'
   | '1080p60'
   | '1440p30'
@@ -69,6 +71,14 @@ export const QUALITY_PRESETS: Record<QualityPresetName, QualityPreset> = {
     frameRate: 30,
     maxBitrate: 2_500_000,
   },
+  // 43 Mpx/s — meio-termo entre 720p e 1080p, util em upload apertado
+  '900p30': {
+    name: '900p30',
+    width: 1600,
+    height: 900,
+    frameRate: 30,
+    maxBitrate: 3_000_000,
+  },
   // 55 Mpx/s — mais leve que 1080p30 e com o dobro de quadros
   '720p60': {
     name: '720p60',
@@ -84,6 +94,14 @@ export const QUALITY_PRESETS: Record<QualityPresetName, QualityPreset> = {
     height: 1080,
     frameRate: 30,
     maxBitrate: 4_000_000,
+  },
+  // 86 Mpx/s — 60 fps por 2/3 do bitrate do 1080p60
+  '900p60': {
+    name: '900p60',
+    width: 1600,
+    height: 900,
+    frameRate: 60,
+    maxBitrate: 6_000_000,
   },
   // 110 Mpx/s
   '1440p30': {
