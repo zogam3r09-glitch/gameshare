@@ -1,0 +1,77 @@
+import { describe, expect, it } from 'vitest';
+import {
+  DEFAULT_PRESET,
+  QUALITY_PRESETS,
+  SOFTWARE_ENCODER_PIXELS_PER_SECOND,
+  pixelsPerSecond,
+  type QualityPresetName,
+} from './types.js';
+
+const presets = Object.entries(QUALITY_PRESETS) as [QualityPresetName, (typeof QUALITY_PRESETS)[QualityPresetName]][];
+
+describe('presets de qualidade', () => {
+  it('a chave do mapa bate com o campo name', () => {
+    for (const [key, preset] of presets) expect(preset.name).toBe(key);
+  });
+
+  it('todos tem dimensoes e framerate positivos', () => {
+    for (const [, p] of presets) {
+      expect(p.width).toBeGreaterThan(0);
+      expect(p.height).toBeGreaterThan(0);
+      expect(p.frameRate).toBeGreaterThan(0);
+      expect(p.maxBitrate).toBeGreaterThan(0);
+    }
+  });
+
+  it('o nome descreve a altura e o framerate reais', () => {
+    for (const [, p] of presets) {
+      expect(p.name).toContain(String(p.frameRate));
+      // 4k30 e o unico rotulado pela largura, nao pela altura
+      if (!p.name.startsWith('4k')) expect(p.name).toContain(String(p.height));
+    }
+  });
+
+  /**
+   * Ordenar por pixels/s e exigir bitrate crescente seria falso: 4k30 e
+   * 1080p120 tem exatamente os mesmos 248,8 Mpx/s, e ainda assim o 4K precisa
+   * de mais bits, porque bitrate acompanha detalhe espacial, nao so
+   * throughput. A checagem util e a densidade ficar numa faixa sensata — foi
+   * assim que apareceu o 1080p60 subdimensionado a 6 Mbps.
+   */
+  it('bits por pixel-segundo ficam numa faixa sensata', () => {
+    for (const [, p] of presets) {
+      const bitsPorPixel = p.maxBitrate / pixelsPerSecond(p);
+      expect(bitsPorPixel, `${p.name}: ${bitsPorPixel.toFixed(4)} bits/px`).toBeGreaterThan(0.04);
+      expect(bitsPorPixel, `${p.name}: ${bitsPorPixel.toFixed(4)} bits/px`).toBeLessThan(0.1);
+    }
+  });
+
+  /**
+   * O aviso e o unico sinal que o usuario tem de que o preset pede mais do que
+   * a codificacao por software entrega. Se alguem adicionar um preset pesado
+   * sem aviso, ou puser aviso num leve, este teste reclama.
+   */
+  it('o aviso corresponde a estar acima do teto do encoder por software', () => {
+    for (const [, p] of presets) {
+      const pesado = pixelsPerSecond(p) > SOFTWARE_ENCODER_PIXELS_PER_SECOND;
+      expect(Boolean(p.warning), `${p.name} (${pixelsPerSecond(p) / 1e6} Mpx/s)`).toBe(pesado);
+    }
+  });
+
+  it('o padrao e leve o bastante e nao tem aviso', () => {
+    const d = QUALITY_PRESETS[DEFAULT_PRESET];
+    expect(d.warning).toBeNull();
+    expect(pixelsPerSecond(d)).toBeLessThanOrEqual(SOFTWARE_ENCODER_PIXELS_PER_SECOND);
+  });
+
+  /**
+   * Regressao do bug de qualidade: o padrao era 720p30, o unico preset que
+   * reduz resolucao numa tela 1080p, entao quem nunca abria o seletor recebia
+   * a pior imagem possivel.
+   */
+  it('o padrao captura 1080p nativo, sem downscale', () => {
+    const d = QUALITY_PRESETS[DEFAULT_PRESET];
+    expect(d.width).toBeGreaterThanOrEqual(1920);
+    expect(d.height).toBeGreaterThanOrEqual(1080);
+  });
+});

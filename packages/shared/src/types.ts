@@ -8,8 +8,15 @@ export interface CaptureSource {
   thumbnailDataUrl: string;
 }
 
-/** Preset de qualidade. V0.1 usa apenas `720p30`; os demais ficam prontos. */
-export type QualityPresetName = '720p30' | '1080p30' | '1080p60' | '1440p60';
+export type QualityPresetName =
+  | '720p30'
+  | '720p60'
+  | '1080p30'
+  | '1080p60'
+  | '1080p120'
+  | '1440p30'
+  | '1440p60'
+  | '4k30';
 
 export interface QualityPreset {
   name: QualityPresetName;
@@ -18,12 +25,84 @@ export interface QualityPreset {
   frameRate: number;
   /** bitrate maximo de video em bits/s */
   maxBitrate: number;
+  /**
+   * Aviso curto exibido no seletor quando o preset pede mais do que a
+   * codificacao por software costuma entregar. Null = dentro do envelope.
+   */
+  warning: string | null;
 }
 
+/**
+ * Teto pratico medido nesta maquina (AMD RX 6700, encoder libvpx por software):
+ * ~32 fps a 1920x1080, ou seja cerca de 124 milhoes de pixels por segundo.
+ * Presets acima disso entram na lista, mas com aviso — a alternativa seria
+ * escondê-los e deixar o usuario descobrir sozinho por que trava.
+ */
+export const SOFTWARE_ENCODER_PIXELS_PER_SECOND = 124_000_000;
+
+export function pixelsPerSecond(p: QualityPreset): number {
+  return p.width * p.height * p.frameRate;
+}
+
+/**
+ * Ordem = ordem do seletor. Lembre que a resolucao e TETO: numa tela menor a
+ * captura sai nativa, e o que muda de fato entre presets e bitrate e fps.
+ *
+ * `maxBitrate` tambem e teto, nunca piso — numa rede pior o WebRTC usa menos
+ * sozinho. Por isso valores generosos nao prejudicam quem tem upload ruim.
+ */
 export const QUALITY_PRESETS: Record<QualityPresetName, QualityPreset> = {
-  '720p30': { name: '720p30', width: 1280, height: 720, frameRate: 30, maxBitrate: 2_500_000 },
-  '1080p30': { name: '1080p30', width: 1920, height: 1080, frameRate: 30, maxBitrate: 4_000_000 },
-  '1080p60': { name: '1080p60', width: 1920, height: 1080, frameRate: 60, maxBitrate: 6_000_000 },
+  // 28 Mpx/s — o mais leve; a escolha certa para upload ruim
+  '720p30': {
+    name: '720p30',
+    width: 1280,
+    height: 720,
+    frameRate: 30,
+    maxBitrate: 2_500_000,
+    warning: null,
+  },
+  // 55 Mpx/s — mais leve que 1080p30 e com o dobro de quadros
+  '720p60': {
+    name: '720p60',
+    width: 1280,
+    height: 720,
+    frameRate: 60,
+    maxBitrate: 3_500_000,
+    warning: null,
+  },
+  // 62 Mpx/s — padrao
+  '1080p30': {
+    name: '1080p30',
+    width: 1920,
+    height: 1080,
+    frameRate: 30,
+    maxBitrate: 4_000_000,
+    warning: null,
+  },
+  // 110 Mpx/s
+  '1440p30': {
+    name: '1440p30',
+    width: 2560,
+    height: 1440,
+    frameRate: 30,
+    maxBitrate: 8_000_000,
+    warning: null,
+  },
+  /**
+   * 124 Mpx/s, no teto medido: entrega ~32 de 60 quadros.
+   *
+   * Bitrate subiu de 6 para 9 Mbps porque a medicao em rede real acusou
+   * `gargalo: "bandwidth"` com o kbps grudado no teto de 6 — estava
+   * subdimensionado, e abaixo do 1440p30, que tem menos pixels por segundo.
+   */
+  '1080p60': {
+    name: '1080p60',
+    width: 1920,
+    height: 1080,
+    frameRate: 60,
+    maxBitrate: 9_000_000,
+    warning: '~metade dos quadros por software',
+  },
   /**
    * 16 Mbps e um EXPERIMENTO, nao um numero calibrado.
    *
@@ -31,12 +110,39 @@ export const QUALITY_PRESETS: Record<QualityPresetName, QualityPreset> = {
    * com apenas ~10.200 em uso, gargalo "none", nack 0 — ou seja, sobra o dobro
    * de banda e o fps codificado mesmo assim fica em 32 de 60. Subir o teto
    * separa as duas explicacoes possiveis: se o fps subir, o limite era o
-   * bitrate; se ficar em ~32, e o libvpx (software) que nao da conta de 1080p60.
-   *
-   * maxBitrate e TETO, nao piso: numa rede pior o WebRTC usa menos sozinho,
-   * entao subir isto nao prejudica quem tem upload ruim.
+   * bitrate; se ficar em ~32, e o libvpx (software) que nao da conta.
    */
-  '1440p60': { name: '1440p60', width: 2560, height: 1440, frameRate: 60, maxBitrate: 16_000_000 },
+  '1440p60': {
+    name: '1440p60',
+    width: 2560,
+    height: 1440,
+    frameRate: 60,
+    maxBitrate: 16_000_000,
+    warning: '~metade dos quadros por software',
+  },
+  // 249 Mpx/s — o dobro do teto medido
+  '4k30': {
+    name: '4k30',
+    width: 3840,
+    height: 2160,
+    frameRate: 30,
+    maxBitrate: 20_000_000,
+    warning: 'muito pesado por software',
+  },
+  /**
+   * 249 Mpx/s, mesma carga do 4K30, e com um segundo obstaculo: o capturador
+   * de tela do Chromium costuma limitar a 60 fps independentemente do pedido.
+   * Fica na lista para a medicao responder — se `fpsCaptura` vier 60 em vez de
+   * 120, a captura recusou; se vier 120 e `fpsCodificado` despencar, foi a CPU.
+   */
+  '1080p120': {
+    name: '1080p120',
+    width: 1920,
+    height: 1080,
+    frameRate: 120,
+    maxBitrate: 12_000_000,
+    warning: 'a captura provavelmente limita a 60',
+  },
 };
 
 /**

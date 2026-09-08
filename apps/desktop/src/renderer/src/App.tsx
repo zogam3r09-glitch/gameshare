@@ -138,6 +138,7 @@ function SourcePanel({ state }: { state: BroadcastState }): React.JSX.Element {
               <option key={p.name} value={p.name}>
                 até {p.height}p{p.frameRate} · {Math.round(p.maxBitrate / 100_000) / 10} Mbps
                 {p.name === DEFAULT_PRESET ? ' (padrão)' : ''}
+                {p.warning ? ` — ${p.warning}` : ''}
               </option>
             ))}
           </select>
