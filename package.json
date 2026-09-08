@@ -12,6 +12,7 @@
     "dev:viewer": "pnpm --filter @game-share/viewer dev",
     "dev:desktop": "pnpm --filter @game-share/desktop dev",
     "livekit:dev": "node scripts/livekit-dev.mjs",
+    "deploy:viewer": "node scripts/deploy-viewer.mjs",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",

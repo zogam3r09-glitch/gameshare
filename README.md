@@ -238,14 +238,19 @@ mesmo ponto. Contornos usados, ambos sem passar pelo GitHub:
   em vez do template "Edit Cloudflare Workers", que concede bem mais.
 
 ```bash
-# publicar o viewer de novo, depois de mudar código
-pnpm --filter @game-share/viewer build
-npx wrangler pages deploy apps/viewer/dist --project-name=gameshare
+pnpm deploy:viewer
 ```
 
-O build precisa de `VITE_TOKEN_SERVER_URL` apontando para o Render, e o
-`wrangler` precisa de `CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID` no
-ambiente.
+Faz build e publica numa etapa. Ele **recusa** publicar se
+`VITE_TOKEN_SERVER_URL` apontar para localhost — publicar assim geraria um site
+que só funciona na sua máquina, e o erro só apareceria quando alguém de fora
+abrisse o link.
+
+Precisa de `CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID` no ambiente; sem
+eles o script diz exatamente onde criar cada um.
+
+Para o token-server, o deploy é pelo painel do Render (Manual Deploy) ou pela
+API. Ambos voltam a ser automáticos quando o app do GitHub for instalado.
 
 ---
 
@@ -461,9 +466,11 @@ nunca o valor absoluto.
   dorme após 15 min — e tratar desconhecida como inexistente quebraria todo
   link ativo no despertar. Consequência: "esse link nunca existiu" continua
   indistinguível de "aguardando". Resolver de vez exige armazenamento externo.
-- **Rate limiting é por processo, em memória.** Suficiente para uma instância;
-  com várias réplicas cada uma conta separado. Escalar exigiria um store
-  compartilhado (Redis), fora do escopo enquanto for uma instância só.
+- **Rate limiting é por processo, em memória.** Com várias réplicas cada uma
+  conta separado. Isso aparece na prática mesmo com uma instância: **durante um
+  deploy a instância antiga e a nova coexistem por alguns segundos**, e o
+  limite efetivo dobra nessa janela — medido, 12 criações passaram onde o
+  limite é 10. Escalar de verdade exigiria um store compartilhado (Redis).
 - **`audio: 'loopback'` captura o áudio do sistema inteiro**, não o da janela
   escolhida. É o que a API do Electron oferece hoje no Windows.
 - **Sem microfone** (por decisão): a call continua no Discord.
