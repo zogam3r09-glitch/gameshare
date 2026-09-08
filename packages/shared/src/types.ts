@@ -13,7 +13,6 @@ export type QualityPresetName =
   | '720p60'
   | '1080p30'
   | '1080p60'
-  | '1080p120'
   | '1440p30'
   | '1440p60'
   | '4k30';
@@ -129,21 +128,17 @@ export const QUALITY_PRESETS: Record<QualityPresetName, QualityPreset> = {
     maxBitrate: 20_000_000,
     warning: 'muito pesado por software',
   },
-  /**
-   * 249 Mpx/s, mesma carga do 4K30, e com um segundo obstaculo: o capturador
-   * de tela do Chromium costuma limitar a 60 fps independentemente do pedido.
-   * Fica na lista para a medicao responder — se `fpsCaptura` vier 60 em vez de
-   * 120, a captura recusou; se vier 120 e `fpsCodificado` despencar, foi a CPU.
-   */
-  '1080p120': {
-    name: '1080p120',
-    width: 1920,
-    height: 1080,
-    frameRate: 120,
-    maxBitrate: 12_000_000,
-    warning: 'a captura provavelmente limita a 60',
-  },
 };
+
+/**
+ * NAO adicione presets acima de 60 fps.
+ *
+ * O 1080p120 existiu aqui e foi removido depois de medido: pedindo 120, o
+ * `fpsCaptura` volta 60. O capturador de tela do Chromium limita a 60 fps
+ * independentemente da constraint, entao o preset so enganava — prometia o
+ * dobro e entregava o mesmo, gastando o teto de bitrate maior a toa.
+ */
+export const MAX_CAPTURE_FRAME_RATE = 60;
 
 /**
  * Padrao em 1080p30, nao 720p30.

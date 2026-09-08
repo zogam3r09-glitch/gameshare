@@ -1,0 +1,47 @@
+# Blueprint do Render para o token-server.
+#
+# Render > New > Blueprint > aponte para este repositorio. Ele le este arquivo
+# e pede so os valores marcados com `sync: false`.
+#
+# O viewer NAO vai aqui: e site estatico e fica no Cloudflare Pages.
+
+services:
+  - type: web
+    name: game-share-token-server
+    runtime: node
+    plan: free
+    # corepack ativa o pnpm na versao que o package.json declara
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm --filter @game-share/token-server start
+
+    # /health responde 503 enquanto faltar configuracao do LiveKit, entao um
+    # deploy com env incompleta falha aqui em vez de subir quebrado.
+    healthCheckPath: /health
+
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+
+      # 0.0.0.0 e obrigatorio: o padrao 127.0.0.1 so aceita conexao local e o
+      # Render nunca alcancaria o processo.
+      - key: TOKEN_SERVER_HOST
+        value: 0.0.0.0
+
+      # Atras do proxy do Render o IP real vem no X-Forwarded-For. Sem isto o
+      # rate limit enxerga um IP so e limita todos os visitantes juntos.
+      - key: TRUST_PROXY
+        value: "1"
+
+      # --- preencher no painel (nao ficam no repositorio) ---
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      # dominio exato do viewer, sem barra final
+      - key: ALLOWED_ORIGINS
+        sync: false
+      # mesma coisa: e a base do link /watch/:roomId que o desktop mostra
+      - key: VITE_VIEWER_BASE_URL
+        sync: false

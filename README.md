@@ -235,38 +235,43 @@ LIVEKIT_API_SECRET=<segredo do projeto>
 
 Nenhuma mudança de código: o token-server devolve essa URL aos clientes.
 
-### 2. Token server
+### 2. Token server (Render)
 
-Qualquer host de Node serve (Railway, Render, Fly). O comando é
-`pnpm --filter @game-share/token-server start` — ele roda via `tsx`, que por
-isso está em `dependencies`, não em `devDependencies`.
+Existe um [`render.yaml`](render.yaml) pronto. No Render:
+**New → Blueprint**, aponte para este repositório, e preencha os cinco valores
+que ele pedir (`LIVEKIT_*`, `ALLOWED_ORIGINS`, `VITE_VIEWER_BASE_URL`).
 
-Variáveis obrigatórias no host: as três do LiveKit, mais
+Os dois que quebram em silêncio já vêm fixos no blueprint:
 
-```
-TOKEN_SERVER_HOST=0.0.0.0
-ALLOWED_ORIGINS=https://seu-viewer.exemplo.com
-VITE_VIEWER_BASE_URL=https://seu-viewer.exemplo.com
-```
+- `TOKEN_SERVER_HOST=0.0.0.0` — o padrão `127.0.0.1` só aceita conexões locais
+  e o host nunca alcançaria o processo
+- `TRUST_PROXY=1` — sem isso o rate limit vê só o IP do proxy e limita todos
+  os visitantes juntos
 
-`TOKEN_SERVER_HOST=0.0.0.0` é obrigatório: o padrão `127.0.0.1` só aceita
-conexões locais e o host nunca alcança o processo. A porta vem de `PORT`
-quando `TOKEN_SERVER_PORT` não existe, que é a convenção desses serviços.
+A porta vem de `PORT`, que o Render injeta. O `healthCheckPath: /health` faz
+um deploy com configuração incompleta falhar ali, em vez de subir quebrado.
 
-Atrás de proxy ou CDN, defina `TRUST_PROXY=1` — sem isso o rate limit enxerga
-um IP só (o do proxy) e limita todos os visitantes juntos.
+> **Plano free dorme após ~15 min sem tráfego.** Na prática não atrapalha: você
+> clica em CRIAR TRANSMISSÃO, isso já acorda o servidor, e quando o amigo abre
+> o link segundos depois ele está quente.
 
-### 3. Viewer
+Outro host de Node serve igual — o comando é
+`pnpm --filter @game-share/token-server start`, que roda via `tsx` (por isso
+`tsx` está em `dependencies`, não em `devDependencies`).
 
-Site estático:
+### 3. Viewer (Cloudflare Pages)
 
-```bash
-pnpm --filter @game-share/viewer build
-```
+No Cloudflare Pages, conecte o repositório e configure:
 
-Publique `apps/viewer/dist/`. **Precisa de fallback de SPA**, senão
-`/watch/XXXX-XXXX` dá 404 — o caminho não é um arquivo. Já existe um
-`public/_redirects` que Netlify e Cloudflare Pages leem sozinhos. Equivalentes:
+| Campo | Valor |
+| ----- | ----- |
+| Build command | `corepack enable && pnpm install && pnpm --filter @game-share/viewer build` |
+| Output directory | `apps/viewer/dist` |
+| Variável de ambiente | `VITE_TOKEN_SERVER_URL=https://<seu-servico>.onrender.com` |
+
+O fallback de SPA já está resolvido: `apps/viewer/public/_redirects` é lido
+pelo Cloudflare sozinho. Sem ele, `/watch/XXXX-XXXX` daria 404, porque o
+caminho não é um arquivo. Equivalentes em outros hosts:
 
 | Host | Configuração |
 | ---- | ------------ |
@@ -274,8 +279,23 @@ Publique `apps/viewer/dist/`. **Precisa de fallback de SPA**, senão
 | Vercel | `{"rewrites":[{"source":"/(.*)","destination":"/index.html"}]}` em `vercel.json` |
 | nginx | `try_files $uri $uri/ /index.html;` |
 
-O build embute `VITE_TOKEN_SERVER_URL`, então essa variável precisa estar
-definida **no momento do build**, não só no host.
+**`VITE_TOKEN_SERVER_URL` precisa existir no momento do BUILD**, não só em
+runtime — ela é embutida no bundle. Verificado: o Vite lê variáveis `VITE_*`
+do ambiente do host e elas têm precedência sobre qualquer `.env` do
+repositório, então definir no painel do Cloudflare basta.
+
+### Ordem que evita retrabalho
+
+Os dois lados referenciam o domínio um do outro, o que parece um impasse. Não é:
+
+1. Suba o **token-server** primeiro com `ALLOWED_ORIGINS` e
+   `VITE_VIEWER_BASE_URL` provisórios. Anote a URL `.onrender.com`.
+2. Suba o **viewer** com `VITE_TOKEN_SERVER_URL` já apontando para ela. Anote
+   a URL `.pages.dev`.
+3. Volte ao Render e corrija `ALLOWED_ORIGINS` e `VITE_VIEWER_BASE_URL` para o
+   domínio real do viewer.
+4. Leia o log do Render: se algum dos dois estiver errado, a validação de
+   coerência avisa em texto claro no startup.
 
 ### Checklist
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_PRESET,
+  MAX_CAPTURE_FRAME_RATE,
   QUALITY_PRESETS,
   SOFTWARE_ENCODER_PIXELS_PER_SECOND,
   pixelsPerSecond,
@@ -69,6 +70,16 @@ describe('presets de qualidade', () => {
    * reduz resolucao numa tela 1080p, entao quem nunca abria o seletor recebia
    * a pior imagem possivel.
    */
+  /**
+   * Medido: pedindo 120 fps, o capturador do Chromium devolve 60. Um preset
+   * acima disso promete o dobro, entrega o mesmo e ainda reserva bitrate a toa.
+   */
+  it('nenhum preset pede mais quadros do que a captura entrega', () => {
+    for (const [, p] of presets) {
+      expect(p.frameRate, p.name).toBeLessThanOrEqual(MAX_CAPTURE_FRAME_RATE);
+    }
+  });
+
   it('o padrao captura 1080p nativo, sem downscale', () => {
     const d = QUALITY_PRESETS[DEFAULT_PRESET];
     expect(d.width).toBeGreaterThanOrEqual(1920);
