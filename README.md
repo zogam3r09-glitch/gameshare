@@ -217,6 +217,38 @@ o teste ficaria frágil. Esse passo é manual.
 
 ---
 
+## Publicado
+
+| peça | onde |
+| ---- | ---- |
+| viewer | <https://gameshare-29b.pages.dev> |
+| token-server | <https://game-share-token-server.onrender.com> |
+| LiveKit | `wss://game-share-poc-kb20b3r6.livekit.cloud` |
+
+### O que não funcionou como documentado
+
+Render e Cloudflare pedem para instalar um app no GitHub, e o GitHub exige
+**verificação de identidade por e-mail** para autorizar. Os dois travam no
+mesmo ponto. Contornos usados, ambos sem passar pelo GitHub:
+
+- **Render** — repositório público por URL. Custo: sem auto-deploy nem PR
+  previews, que voltam quando o app do GitHub for instalado.
+- **Cloudflare** — upload direto com `wrangler`, autenticado por API token
+  criado no painel com permissão mínima (`Account → Cloudflare Pages → Edit`),
+  em vez do template "Edit Cloudflare Workers", que concede bem mais.
+
+```bash
+# publicar o viewer de novo, depois de mudar código
+pnpm --filter @game-share/viewer build
+npx wrangler pages deploy apps/viewer/dist --project-name=gameshare
+```
+
+O build precisa de `VITE_TOKEN_SERVER_URL` apontando para o Render, e o
+`wrangler` precisa de `CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID` no
+ambiente.
+
+---
+
 ## Publicar (um amigo assistindo de outra rede)
 
 Tudo até aqui roda numa máquina só. Para alguém de fora assistir, três peças
