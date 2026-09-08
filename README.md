@@ -380,10 +380,14 @@ nunca o valor absoluto.
 - **RTT não é exibido.** `remote-inbound-rtp.roundTripTime` só existe após os
   primeiros relatórios RTCP e some sem assinante; mostrar seria inventar número.
   Bitrate e FPS codificado vêm de `getRTCStatsReport()` (API pública).
-- **Sem persistência.** Um `roomId` bem-formado sempre recebe token de viewer,
-  mesmo que a sala nunca tenha existido — o viewer fica em "Aguardando
-  transmissão…" em vez de "esse link não existe". Distinguir os dois casos
-  exigiria guardar estado, o que está fora da V0.1.
+- **Registro de salas é em memória.** O token-server lembra as salas que criou
+  e recusa espectadores em salas **encerradas** (410 `ROOM_ENDED`), para o link
+  antigo dizer "Transmissão encerrada" em vez de esperar para sempre. Mas uma
+  sala **desconhecida** continua recebendo token de propósito: o processo pode
+  ter reiniciado com a transmissão no ar — no plano gratuito do Render ele
+  dorme após 15 min — e tratar desconhecida como inexistente quebraria todo
+  link ativo no despertar. Consequência: "esse link nunca existiu" continua
+  indistinguível de "aguardando". Resolver de vez exige armazenamento externo.
 - **Rate limiting é por processo, em memória.** Suficiente para uma instância;
   com várias réplicas cada uma conta separado. Escalar exigiria um store
   compartilhado (Redis), fora do escopo enquanto for uma instância só.
