@@ -1,7 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    // DOM entra so pelos tipos de RTCStatsReport em rtcStats.ts. Sao apagados
+    // na compilacao, entao o token-server (Node) nao carrega nada disso.
+    "lib": ["ES2023", "DOM"]
   },
   "include": ["src"]
 }

@@ -7,7 +7,15 @@ import {
   Room,
   RoomEvent,
 } from 'livekit-client';
-import { createLogger, errorMessage, isPublisherIdentity, isViewerIdentity } from '@game-share/shared';
+import {
+  AMOSTRA_ENTRADA_VAZIA,
+  createLogger,
+  errorMessage,
+  isPublisherIdentity,
+  isViewerIdentity,
+  lerAmostraEntrada,
+  type RtcSampleEntrada,
+} from '@game-share/shared';
 import { ViewerApiError, fetchViewerToken } from './api.js';
 
 const log = createLogger('viewer');
@@ -20,28 +28,13 @@ export type WatchPhase =
   | 'ended'
   | 'error';
 
-/** Metricas do lado que RECEBE. Tudo de getRTCStatsReport (API publica). */
-export interface ReceiveStats {
-  fps: number | null;
-  /** atraso medio do jitter buffer em ms — o principal suspeito de "lag" */
-  jitterBufferMs: number | null;
+/** Metricas do lado que RECEBE, mais o playout delay, que nao vem do report. */
+export interface ReceiveStats extends RtcSampleEntrada {
   /** atraso de reproducao pedido ao Chromium, em ms */
   playoutDelayMs: number | null;
-  freezeCount: number | null;
-  freezeMs: number | null;
-  packetsLost: number | null;
-  decoder: string | null;
 }
 
-const EMPTY_RECEIVE: ReceiveStats = {
-  fps: null,
-  jitterBufferMs: null,
-  playoutDelayMs: null,
-  freezeCount: null,
-  freezeMs: null,
-  packetsLost: null,
-  decoder: null,
-};
+const EMPTY_RECEIVE: ReceiveStats = { ...AMOSTRA_ENTRADA_VAZIA, playoutDelayMs: null };
 
 export interface WatchState {
   phase: WatchPhase;
@@ -100,39 +93,16 @@ async function sampleReceive(track: RemoteVideoTrack): Promise<ReceiveStats | nu
   }
   if (!report) return null;
 
-  const out: ReceiveStats = { ...EMPTY_RECEIVE };
+  // O parsing vive em @game-share/shared: o desktop le as estatisticas de
+  // envio e o viewer as de recepcao, e antes havia codigo parecido nos dois.
+  const out: ReceiveStats = { ...lerAmostraEntrada(report), playoutDelayMs: null };
+
   try {
     const delay = track.getPlayoutDelay();
     if (typeof delay === 'number') out.playoutDelayMs = Math.round(delay * 1000);
   } catch {
     // nem todo navegador expoe playoutDelayHint
   }
-
-  report.forEach((entry) => {
-    const s = entry as RTCStats & {
-      kind?: string;
-      framesPerSecond?: number;
-      jitterBufferDelay?: number;
-      jitterBufferEmittedCount?: number;
-      freezeCount?: number;
-      totalFreezesDuration?: number;
-      packetsLost?: number;
-      decoderImplementation?: string;
-    };
-    if (s.type !== 'inbound-rtp' || s.kind !== 'video') return;
-
-    if (typeof s.framesPerSecond === 'number') out.fps = Math.round(s.framesPerSecond);
-    // jitterBufferDelay e acumulado; dividir pelo contador da a media por quadro
-    if (typeof s.jitterBufferDelay === 'number' && s.jitterBufferEmittedCount) {
-      out.jitterBufferMs = Math.round((s.jitterBufferDelay / s.jitterBufferEmittedCount) * 1000);
-    }
-    if (typeof s.freezeCount === 'number') out.freezeCount = s.freezeCount;
-    if (typeof s.totalFreezesDuration === 'number') {
-      out.freezeMs = Math.round(s.totalFreezesDuration * 1000);
-    }
-    if (typeof s.packetsLost === 'number') out.packetsLost = s.packetsLost;
-    if (typeof s.decoderImplementation === 'string') out.decoder = s.decoderImplementation;
-  });
 
   return out;
 }

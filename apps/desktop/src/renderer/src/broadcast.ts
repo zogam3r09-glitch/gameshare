@@ -14,6 +14,9 @@ import {
   createLogger,
   errorMessage,
   isViewerIdentity,
+  kbpsEntreAmostras,
+  lerAmostra,
+  type MarcaBytes,
   type CaptureSource,
   type CreateRoomResponse,
   type QualityPresetName,
@@ -151,7 +154,7 @@ export class Broadcaster {
   private videoTrack: LocalVideoTrack | null = null;
   private audioTrack: LocalAudioTrack | null = null;
   private statsTimer: ReturnType<typeof setInterval> | null = null;
-  private lastBytesSent: { bytes: number; at: number } | null = null;
+  private lastBytesSent: MarcaBytes | null = null;
   private statsTick = 0;
 
   subscribe(listener: (s: BroadcastState) => void): () => void {
@@ -467,9 +470,6 @@ export class Broadcaster {
       captureFps: settings.frameRate ? Math.round(settings.frameRate) : null,
     });
 
-    // TODO(v0.2): RTT. `remote-inbound-rtp.roundTripTime` so aparece depois dos
-    // primeiros relatorios RTCP e some quando nao ha assinante, entao ainda nao
-    // e um numero confiavel de mostrar na UI. Fica de fora ate ter viewer real.
     let report: RTCStatsReport | undefined;
     try {
       report = await track.getRTCStatsReport();
@@ -479,94 +479,30 @@ export class Broadcaster {
     }
     if (!report) return;
 
-    let encodedFps: number | null = null;
-    let bytesSent: number | null = null;
-    let encoder: string | null = null;
-    let limitedBy: string | null = null;
-    let framesDropped: number | null = null;
-    let availableKbps: number | null = null;
-    let rttMs: number | null = null;
-    let nack: number | null = null;
-    let pli: number | null = null;
-    let encodedWidth: number | null = null;
-    let encodedHeight: number | null = null;
-    let sourceFps: number | null = null;
-    let limitedByCpuSeconds: number | null = null;
-    let limitedByBandwidthSeconds: number | null = null;
+    const amostra = lerAmostra(report);
 
-    report.forEach((entry) => {
-      const s = entry as RTCStats & {
-        kind?: string;
-        framesPerSecond?: number;
-        bytesSent?: number;
-        encoderImplementation?: string;
-        qualityLimitationReason?: string;
-        framesSent?: number;
-        framesEncoded?: number;
-        nackCount?: number;
-        pliCount?: number;
-        frameWidth?: number;
-        frameHeight?: number;
-        qualityLimitationDurations?: Record<string, number>;
-      };
-      if (s.type !== 'outbound-rtp' || s.kind !== 'video') return;
-      if (typeof s.framesPerSecond === 'number') encodedFps = Math.round(s.framesPerSecond);
-      if (typeof s.bytesSent === 'number') bytesSent = (bytesSent ?? 0) + s.bytesSent;
-      if (typeof s.encoderImplementation === 'string') encoder = s.encoderImplementation;
-      if (typeof s.qualityLimitationReason === 'string') limitedBy = s.qualityLimitationReason;
-      if (typeof s.nackCount === 'number') nack = s.nackCount;
-      if (typeof s.pliCount === 'number') pli = s.pliCount;
-      if (typeof s.frameWidth === 'number') encodedWidth = s.frameWidth;
-      if (typeof s.frameHeight === 'number') encodedHeight = s.frameHeight;
-      if (s.qualityLimitationDurations) {
-        const d = s.qualityLimitationDurations;
-        if (typeof d.cpu === 'number') limitedByCpuSeconds = Math.round(d.cpu);
-        if (typeof d.bandwidth === 'number') limitedByBandwidthSeconds = Math.round(d.bandwidth);
-      }
-    });
-
-    // Par ICE em uso: e aqui que mora a estimativa de banda. Um colapso do BWE
-    // derruba o encoder junto, e sem este numero a queda fica sem explicacao —
-    // ja aconteceu por ~2,5min com a captura intacta em 60fps.
-    report.forEach((entry) => {
-      const s = entry as RTCStats & {
-        nominated?: boolean;
-        state?: string;
-        availableOutgoingBitrate?: number;
-        currentRoundTripTime?: number;
-      };
-      if (s.type !== 'candidate-pair' || s.state !== 'succeeded' || !s.nominated) return;
-      if (typeof s.availableOutgoingBitrate === 'number') {
-        availableKbps = Math.round(s.availableOutgoingBitrate / 1000);
-      }
-      if (typeof s.currentRoundTripTime === 'number') {
-        rttMs = Math.round(s.currentRoundTripTime * 1000);
-      }
-    });
-
-    // A FONTE: quantos quadros a captura realmente produz, e quantos se perdem
-    // antes do encoder. `getSettings().frameRate` nao serve aqui — devolve o
-    // valor pedido, nao o entregue.
-    report.forEach((entry) => {
-      const s = entry as RTCStats & {
-        kind?: string;
-        framesDropped?: number;
-        framesPerSecond?: number;
-      };
-      if (s.type !== 'media-source' || s.kind !== 'video') return;
-      if (typeof s.framesDropped === 'number') framesDropped = s.framesDropped;
-      if (typeof s.framesPerSecond === 'number') sourceFps = Math.round(s.framesPerSecond);
-    });
-
-    let videoKbps: number | null = this.state.stats.videoKbps;
-    if (bytesSent !== null) {
-      const now = performance.now();
-      const prev = this.lastBytesSent;
-      if (prev && now > prev.at) {
-        videoKbps = Math.round(((bytesSent - prev.bytes) * 8) / (now - prev.at));
-      }
-      this.lastBytesSent = { bytes: bytesSent, at: now };
+    let videoKbps = this.state.stats.videoKbps;
+    if (amostra.videoBytesSent !== null) {
+      const marca = { bytes: amostra.videoBytesSent, at: performance.now() };
+      videoKbps = kbpsEntreAmostras(this.lastBytesSent, marca) ?? videoKbps;
+      this.lastBytesSent = marca;
     }
+
+    const {
+      encodedFps,
+      sourceFps,
+      encoder,
+      limitedBy,
+      framesDropped,
+      availableKbps,
+      rttMs,
+      nack,
+      pli,
+      encodedWidth,
+      encodedHeight,
+      limitedByCpuSeconds,
+      limitedByBandwidthSeconds,
+    } = amostra;
 
     this.setStats({
       encodedFps,
