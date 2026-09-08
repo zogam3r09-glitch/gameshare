@@ -3,7 +3,7 @@ import {
   DEFAULT_PRESET,
   MAX_CAPTURE_FRAME_RATE,
   QUALITY_PRESETS,
-  SOFTWARE_ENCODER_PIXELS_PER_SECOND,
+  OBSERVED_CAPTURE_PIXELS_PER_SECOND,
   pixelsPerSecond,
   type QualityPresetName,
 } from './types.js';
@@ -48,13 +48,13 @@ describe('presets de qualidade', () => {
   });
 
   /**
-   * O aviso e o unico sinal que o usuario tem de que o preset pede mais do que
-   * a codificacao por software entrega. Se alguem adicionar um preset pesado
-   * sem aviso, ou puser aviso num leve, este teste reclama.
+   * O aviso e o unico sinal que o usuario tem de que o preset pede mais
+   * quadros do que a captura entrega. Se alguem adicionar um preset acima do
+   * teto sem aviso, ou puser aviso num que cabe, este teste reclama.
    */
-  it('o aviso corresponde a estar acima do teto do encoder por software', () => {
+  it('o aviso corresponde a estar acima do teto observado de captura', () => {
     for (const [, p] of presets) {
-      const pesado = pixelsPerSecond(p) > SOFTWARE_ENCODER_PIXELS_PER_SECOND;
+      const pesado = pixelsPerSecond(p) > OBSERVED_CAPTURE_PIXELS_PER_SECOND;
       expect(Boolean(p.warning), `${p.name} (${pixelsPerSecond(p) / 1e6} Mpx/s)`).toBe(pesado);
     }
   });
@@ -62,7 +62,7 @@ describe('presets de qualidade', () => {
   it('o padrao e leve o bastante e nao tem aviso', () => {
     const d = QUALITY_PRESETS[DEFAULT_PRESET];
     expect(d.warning).toBeNull();
-    expect(pixelsPerSecond(d)).toBeLessThanOrEqual(SOFTWARE_ENCODER_PIXELS_PER_SECOND);
+    expect(pixelsPerSecond(d)).toBeLessThanOrEqual(OBSERVED_CAPTURE_PIXELS_PER_SECOND);
   });
 
   /**

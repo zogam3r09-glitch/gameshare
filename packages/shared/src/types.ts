@@ -32,20 +32,24 @@ export interface QualityPreset {
 }
 
 /**
- * Teto pratico OBSERVADO nesta maquina: ~32 fps a 1920x1080, ou seja cerca de
- * 124 milhoes de pixels por segundo. Presets acima disso entram na lista, mas
- * com aviso — esconde-los deixaria o usuario descobrir sozinho por que trava.
+ * Teto observado da CAPTURA: ~32 fps, medido a 1920x1080.
  *
- * ATENCAO: a CAUSA nao esta estabelecida. Chamar isso de "limite do encoder
- * por software" foi conclusao apressada minha, e ha evidencia contra:
- * qualityLimitationReason reporta "none" em todas as amostras, e a maquina e
- * um Ryzen 7 5700X, que nao deveria empacar em 1080p. A hipotese concorrente e
- * o proprio capturador de tela nao produzir 60 quadros — o `fpsCaptura` antigo
- * vinha de getSettings(), que devolve o valor PEDIDO, nao o entregue.
- * A instrumentacao de fpsFonte e qualityLimitationDurations existe para
- * responder isso. Ate la, o numero e descritivo, nao explicativo.
+ * A causa esta estabelecida e NAO e o encoder. Pedindo 60 fps, medimos:
+ *
+ *   fpsPedido 60 | fpsFonte 32 | fpsCodificado 32 | segLimitadoCpu 0
+ *
+ * media-source entrega 32 quadros, o encoder codifica os 32, e
+ * qualityLimitationDurations.cpu fica zerado. O capturador de tela do Windows
+ * e quem nao acompanha; o encoder e a CPU (Ryzen 7 5700X) estao sobrando.
+ * Trocar para H.264 por hardware nao ganharia nada aqui.
+ *
+ * EM ABERTO: se o teto e ~32 fps de forma achatada, ou proporcional a
+ * resolucao. So ha medicao a 1080p. Se 720p60 tambem entregar 32, o modelo de
+ * pixels por segundo abaixo esta errado e a regra correta e sobre framerate.
+ * Testar antes de refatorar - a expressao em pixels/s continua descrevendo
+ * corretamente os presets medidos, entao nao ha pressa.
  */
-export const SOFTWARE_ENCODER_PIXELS_PER_SECOND = 124_000_000;
+export const OBSERVED_CAPTURE_PIXELS_PER_SECOND = 124_000_000;
 
 export function pixelsPerSecond(p: QualityPreset): number {
   return p.width * p.height * p.frameRate;
