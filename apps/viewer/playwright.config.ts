@@ -42,7 +42,13 @@ export default defineConfig({
       command: 'pnpm --filter @game-share/viewer dev',
       cwd: repoRoot,
       url: 'http://localhost:5174',
-      reuseExistingServer: true,
+      // Fixa o token-server LOCAL em vez de herdar o .env. Sem isto, apontar o
+      // .env para producao (que e o normal para gerar links publicos no
+      // desktop) faz o viewer de teste pedir token para o servidor publicado,
+      // cujo ALLOWED_ORIGINS nao inclui localhost — e todo e2e quebra por CORS,
+      // com sintoma de "video nao aparece". Ja aconteceu.
+      env: { VITE_TOKEN_SERVER_URL: 'http://127.0.0.1:8787' },
+      reuseExistingServer: false,
       timeout: 60_000,
     },
   ],
