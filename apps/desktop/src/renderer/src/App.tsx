@@ -224,41 +224,51 @@ function LivePanel({ state }: { state: BroadcastState }): React.JSX.Element {
         <span className="live__dot" /> AO VIVO
       </p>
 
+      {/* O que um usuario olha enquanto transmite. O resto e diagnostico. */}
       <dl className="stats">
         <Stat label="Fonte" value={sourceName} />
-        <Stat label="Resolução (captura)" value={resolution} />
-        <Stat
-          label="Resolução (enviada)"
-          value={
-            stats.encodedWidth && stats.encodedHeight
-              ? `${stats.encodedWidth} × ${stats.encodedHeight}` +
-                (stats.width && stats.encodedWidth < stats.width ? ' ⚠ reduzida' : '')
-              : '—'
-          }
-        />
-        <Stat label="FPS" value={fps} />
-        <Stat label="Bitrate" value={stats.videoKbps !== null ? `${stats.videoKbps} kbps` : '—'} />
+        <Stat label="Assistindo" value={String(stats.viewers)} />
+        {/* "Conexão", nao "Qualidade": ao lado de um seletor chamado
+            Qualidade, o nome antigo sugeria que era o preset escolhido. */}
+        <Stat label="Conexão" value={QUALITY_LABEL[stats.quality]} />
         <Stat label="Áudio do sistema" value={stats.hasAudio ? 'Ativo' : 'Sem áudio'} />
-        <Stat label="Participantes" value={String(stats.viewers)} />
-        <Stat label="Conexão" value={CONNECTION_LABEL[stats.connection]} />
-        <Stat label="Qualidade" value={QUALITY_LABEL[stats.quality]} />
-        <Stat label="RTT" value={stats.rttMs !== null ? `${stats.rttMs} ms` : '—'} />
-        <Stat
-          label="Banda estimada"
-          value={stats.availableKbps !== null ? `${stats.availableKbps} kbps` : '—'}
-        />
-        <Stat label="Encoder" value={encoderLabel(stats.encoder)} />
-        <Stat label="Gargalo" value={LIMIT_LABEL[stats.limitedBy ?? 'none'] ?? stats.limitedBy!} />
-        <Stat
-          label="Quadros perdidos"
-          value={stats.framesDropped !== null ? String(stats.framesDropped) : '—'}
-        />
       </dl>
 
       <label className="link">
         Link para os amigos
         <input readOnly value={room?.watchUrl ?? ''} onFocus={(e) => e.currentTarget.select()} />
       </label>
+
+      <details className="details">
+        <summary>Detalhes técnicos</summary>
+        <dl className="stats stats--dense">
+          <Stat label="Resolução (captura)" value={resolution} />
+          <Stat
+            label="Resolução (enviada)"
+            value={
+              stats.encodedWidth && stats.encodedHeight
+                ? `${stats.encodedWidth} × ${stats.encodedHeight}` +
+                  (stats.width && stats.encodedWidth < stats.width ? ' ⚠ reduzida' : '')
+                : '—'
+            }
+          />
+          <Stat label="FPS" value={fps} />
+          <Stat label="Bitrate" value={stats.videoKbps !== null ? `${stats.videoKbps} kbps` : '—'} />
+          <Stat label="Preset" value={state.preset} />
+          <Stat label="Estado" value={CONNECTION_LABEL[stats.connection]} />
+          <Stat label="RTT" value={stats.rttMs !== null ? `${stats.rttMs} ms` : '—'} />
+          <Stat
+            label="Banda estimada"
+            value={stats.availableKbps !== null ? `${stats.availableKbps} kbps` : '—'}
+          />
+          <Stat label="Encoder" value={encoderLabel(stats.encoder)} />
+          <Stat label="Gargalo" value={LIMIT_LABEL[stats.limitedBy ?? 'none'] ?? stats.limitedBy!} />
+          <Stat
+            label="Quadros perdidos"
+            value={stats.framesDropped !== null ? String(stats.framesDropped) : '—'}
+          />
+        </dl>
+      </details>
 
       <div className="panel__foot">
         <button className="btn" onClick={() => void copy()}>
