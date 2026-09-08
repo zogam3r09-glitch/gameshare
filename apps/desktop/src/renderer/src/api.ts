@@ -27,8 +27,19 @@ export async function createRoom(): Promise<CreateRoomResponse> {
       headers: { 'content-type': 'application/json' },
     });
   } catch {
+    /**
+     * Um fetch bloqueado por CORS falha de forma indistinguivel de servidor
+     * fora do ar: o navegador nao conta qual dos dois foi. A mensagem precisa
+     * citar as duas causas, senao manda investigar o lado errado — foi o que
+     * aconteceu quando o desktop passou a apontar para producao e a origem
+     * dele nao estava em ALLOWED_ORIGINS.
+     */
+    const local = /localhost|127\.0\.0\.1/.test(TOKEN_SERVER_URL ?? '');
     throw new TokenServerError(
-      `Token server inacessivel em ${TOKEN_SERVER_URL}. Rode "pnpm dev:server".`,
+      `Nao foi possivel falar com o token server em ${TOKEN_SERVER_URL}. ` +
+        (local
+          ? 'Ele esta rodando? Use "pnpm dev:server".'
+          : 'Pode estar fora do ar, ou a origem deste app pode nao estar em ALLOWED_ORIGINS no servidor.'),
       'unreachable',
     );
   }

@@ -32,11 +32,17 @@ services:
       - key: TRUST_PROXY
         value: "1"
 
-      # Dominio do viewer publicado. Nao e segredo, entao fica versionado aqui
-      # em vez de digitado no painel: assim o valor certo e reproduzivel e nao
-      # depende de ninguem lembrar de atualizar os dois lugares.
+      # Dominio do viewer publicado, mais a origem do renderer do desktop em
+      # dev. Nao e segredo, entao fica versionado aqui em vez de digitado no
+      # painel: assim o valor certo e reproduzivel.
+      #
+      # localhost:5173 nao enfraquece nada. CORS nao protege esta API - um
+      # curl cria sala sem Origin nenhuma, ver "Seguranca" no README. CORS
+      # serve para barrar OUTROS SITES no navegador do usuario, e o desktop e
+      # cliente de primeira parte. Sem esta entrada o app nem consegue criar
+      # transmissao apontando para producao.
       - key: ALLOWED_ORIGINS
-        value: https://gameshare-29b.pages.dev
+        value: https://gameshare-29b.pages.dev,http://localhost:5173
       # base do link /watch/:roomId que o desktop mostra e copia
       - key: VITE_VIEWER_BASE_URL
         value: https://gameshare-29b.pages.dev
