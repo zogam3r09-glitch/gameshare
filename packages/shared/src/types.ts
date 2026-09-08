@@ -24,7 +24,19 @@ export const QUALITY_PRESETS: Record<QualityPresetName, QualityPreset> = {
   '720p30': { name: '720p30', width: 1280, height: 720, frameRate: 30, maxBitrate: 2_500_000 },
   '1080p30': { name: '1080p30', width: 1920, height: 1080, frameRate: 30, maxBitrate: 4_000_000 },
   '1080p60': { name: '1080p60', width: 1920, height: 1080, frameRate: 60, maxBitrate: 6_000_000 },
-  '1440p60': { name: '1440p60', width: 2560, height: 1440, frameRate: 60, maxBitrate: 10_000_000 },
+  /**
+   * 16 Mbps e um EXPERIMENTO, nao um numero calibrado.
+   *
+   * Medido em rede real contra o LiveKit Cloud, neste preset: bweKbps ~19.700
+   * com apenas ~10.200 em uso, gargalo "none", nack 0 — ou seja, sobra o dobro
+   * de banda e o fps codificado mesmo assim fica em 32 de 60. Subir o teto
+   * separa as duas explicacoes possiveis: se o fps subir, o limite era o
+   * bitrate; se ficar em ~32, e o libvpx (software) que nao da conta de 1080p60.
+   *
+   * maxBitrate e TETO, nao piso: numa rede pior o WebRTC usa menos sozinho,
+   * entao subir isto nao prejudica quem tem upload ruim.
+   */
+  '1440p60': { name: '1440p60', width: 2560, height: 1440, frameRate: 60, maxBitrate: 16_000_000 },
 };
 
 export const DEFAULT_PRESET: QualityPresetName = '720p30';
