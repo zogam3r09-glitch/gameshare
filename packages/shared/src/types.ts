@@ -24,33 +24,31 @@ export interface QualityPreset {
   frameRate: number;
   /** bitrate maximo de video em bits/s */
   maxBitrate: number;
-  /**
-   * Aviso curto exibido no seletor quando o preset pede mais do que a
-   * codificacao por software costuma entregar. Null = dentro do envelope.
-   */
-  warning: string | null;
 }
 
 /**
- * Teto observado da CAPTURA: ~32 fps, medido a 1920x1080.
+ * NAO existe um teto fixo de fps de captura por resolucao. Ja existiu aqui uma
+ * constante OBSERVED_CAPTURE_PIXELS_PER_SECOND = 124 Mpx/s, e ela estava
+ * errada por dois motivos:
  *
- * A causa esta estabelecida e NAO e o encoder. Pedindo 60 fps, medimos:
+ * 1. O numero nao se repete. Mesma maquina, mesma tela, mesmo 1080p60: uma
+ *    sessao mediu fpsFonte 32 estavel; outra mediu 58, 58, 58, 41. O
+ *    capturador do Windows entrega quadro quando a tela MUDA, entao o fps da
+ *    fonte segue o conteudo, nao a capacidade do hardware. Tela parada rende
+ *    poucos quadros e isso nao e gargalo nenhum.
  *
- *   fpsPedido 60 | fpsFonte 32 | fpsCodificado 32 | segLimitadoCpu 0
+ * 2. Mesmo se fosse estavel, medir pela resolucao do PRESET seria errado. A
+ *    resolucao do preset e teto e `max` nunca faz upscale: numa tela 1080p,
+ *    4k30 captura 1920x1080 igual ao 1080p30. A carga real sai da tela do
+ *    usuario, que este pacote nao conhece.
  *
- * media-source entrega 32 quadros, o encoder codifica os 32, e
- * qualityLimitationDurations.cpu fica zerado. O capturador de tela do Windows
- * e quem nao acompanha; o encoder e a CPU (Ryzen 7 5700X) estao sobrando.
- * Trocar para H.264 por hardware nao ganharia nada aqui.
+ * Por isso os presets nao tem mais campo `warning`: qualquer aviso aqui seria
+ * um palpite sobre a maquina de quem esta lendo. O painel AO VIVO mostra
+ * fpsFonte, fpsCodificado e `gargalo` reais - esse e o lugar de diagnosticar.
  *
- * EM ABERTO: se o teto e ~32 fps de forma achatada, ou proporcional a
- * resolucao. So ha medicao a 1080p. Se 720p60 tambem entregar 32, o modelo de
- * pixels por segundo abaixo esta errado e a regra correta e sobre framerate.
- * Testar antes de refatorar - a expressao em pixels/s continua descrevendo
- * corretamente os presets medidos, entao nao ha pressa.
+ * MAX_CAPTURE_FRAME_RATE abaixo continua valendo: aquele foi medido e se
+ * repete, porque e um limite do Chromium, nao do conteudo.
  */
-export const OBSERVED_CAPTURE_PIXELS_PER_SECOND = 124_000_000;
-
 export function pixelsPerSecond(p: QualityPreset): number {
   return p.width * p.height * p.frameRate;
 }
@@ -70,7 +68,6 @@ export const QUALITY_PRESETS: Record<QualityPresetName, QualityPreset> = {
     height: 720,
     frameRate: 30,
     maxBitrate: 2_500_000,
-    warning: null,
   },
   // 55 Mpx/s — mais leve que 1080p30 e com o dobro de quadros
   '720p60': {
@@ -79,7 +76,6 @@ export const QUALITY_PRESETS: Record<QualityPresetName, QualityPreset> = {
     height: 720,
     frameRate: 60,
     maxBitrate: 3_500_000,
-    warning: null,
   },
   // 62 Mpx/s — padrao
   '1080p30': {
@@ -88,7 +84,6 @@ export const QUALITY_PRESETS: Record<QualityPresetName, QualityPreset> = {
     height: 1080,
     frameRate: 30,
     maxBitrate: 4_000_000,
-    warning: null,
   },
   // 110 Mpx/s
   '1440p30': {
@@ -97,10 +92,9 @@ export const QUALITY_PRESETS: Record<QualityPresetName, QualityPreset> = {
     height: 1440,
     frameRate: 30,
     maxBitrate: 8_000_000,
-    warning: null,
   },
   /**
-   * 124 Mpx/s, no teto medido: entrega ~32 de 60 quadros.
+   * 124 Mpx/s.
    *
    * Bitrate subiu de 6 para 9 Mbps porque a medicao em rede real acusou
    * `gargalo: "bandwidth"` com o kbps grudado no teto de 6 — estava
@@ -112,16 +106,16 @@ export const QUALITY_PRESETS: Record<QualityPresetName, QualityPreset> = {
     height: 1080,
     frameRate: 60,
     maxBitrate: 9_000_000,
-    warning: 'entrega ~metade dos quadros',
   },
   /**
    * 16 Mbps e um EXPERIMENTO, nao um numero calibrado.
    *
    * Medido em rede real contra o LiveKit Cloud, neste preset: bweKbps ~19.700
-   * com apenas ~10.200 em uso, gargalo "none", nack 0 — ou seja, sobra o dobro
-   * de banda e o fps codificado mesmo assim fica em 32 de 60. Subir o teto
-   * separa as duas explicacoes possiveis: se o fps subir, o limite era o
-   * bitrate; se ficar em ~32, e o libvpx (software) que nao da conta.
+   * com apenas ~10.200 em uso, gargalo "none", nack 0 — sobra o dobro de banda
+   * e o fps codificado ficou em 32 de 60 naquela sessao. Ficou subindo o teto
+   * para separar as explicacoes; a resposta veio de outro lado (o fps da fonte
+   * segue o conteudo da tela, ver comentario acima dos presets), entao 16 Mbps
+   * continua sendo um chute generoso, nao uma calibracao.
    */
   '1440p60': {
     name: '1440p60',
@@ -129,16 +123,15 @@ export const QUALITY_PRESETS: Record<QualityPresetName, QualityPreset> = {
     height: 1440,
     frameRate: 60,
     maxBitrate: 16_000_000,
-    warning: 'entrega ~metade dos quadros',
   },
-  // 249 Mpx/s — o dobro do teto medido
+  // 249 Mpx/s — so faz diferenca em tela 4K; abaixo disso e 1080p30 com teto
+  // de bitrate folgado, ja que a resolucao do preset nunca faz upscale
   '4k30': {
     name: '4k30',
     width: 3840,
     height: 2160,
     frameRate: 30,
     maxBitrate: 20_000_000,
-    warning: 'muito pesado por software',
   },
 };
 

@@ -3,7 +3,6 @@ import {
   DEFAULT_PRESET,
   MAX_CAPTURE_FRAME_RATE,
   QUALITY_PRESETS,
-  OBSERVED_CAPTURE_PIXELS_PER_SECOND,
   pixelsPerSecond,
   type QualityPresetName,
 } from './types.js';
@@ -48,29 +47,6 @@ describe('presets de qualidade', () => {
   });
 
   /**
-   * O aviso e o unico sinal que o usuario tem de que o preset pede mais
-   * quadros do que a captura entrega. Se alguem adicionar um preset acima do
-   * teto sem aviso, ou puser aviso num que cabe, este teste reclama.
-   */
-  it('o aviso corresponde a estar acima do teto observado de captura', () => {
-    for (const [, p] of presets) {
-      const pesado = pixelsPerSecond(p) > OBSERVED_CAPTURE_PIXELS_PER_SECOND;
-      expect(Boolean(p.warning), `${p.name} (${pixelsPerSecond(p) / 1e6} Mpx/s)`).toBe(pesado);
-    }
-  });
-
-  it('o padrao e leve o bastante e nao tem aviso', () => {
-    const d = QUALITY_PRESETS[DEFAULT_PRESET];
-    expect(d.warning).toBeNull();
-    expect(pixelsPerSecond(d)).toBeLessThanOrEqual(OBSERVED_CAPTURE_PIXELS_PER_SECOND);
-  });
-
-  /**
-   * Regressao do bug de qualidade: o padrao era 720p30, o unico preset que
-   * reduz resolucao numa tela 1080p, entao quem nunca abria o seletor recebia
-   * a pior imagem possivel.
-   */
-  /**
    * Medido: pedindo 120 fps, o capturador do Chromium devolve 60. Um preset
    * acima disso promete o dobro, entrega o mesmo e ainda reserva bitrate a toa.
    */
@@ -80,6 +56,11 @@ describe('presets de qualidade', () => {
     }
   });
 
+  /**
+   * Regressao do bug de qualidade: o padrao era 720p30, o unico preset que
+   * reduz resolucao numa tela 1080p, entao quem nunca abria o seletor recebia
+   * a pior imagem possivel.
+   */
   it('o padrao captura 1080p nativo, sem downscale', () => {
     const d = QUALITY_PRESETS[DEFAULT_PRESET];
     expect(d.width).toBeGreaterThanOrEqual(1920);
