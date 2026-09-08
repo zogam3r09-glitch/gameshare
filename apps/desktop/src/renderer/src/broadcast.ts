@@ -11,6 +11,9 @@ import {
 import {
   QUALITY_PRESETS,
   DEFAULT_PRESET,
+  ROOM_OPTIONS,
+  SCREEN_AUDIO_OPTIONS,
+  screenShareOptions,
   createLogger,
   errorMessage,
   isViewerIdentity,
@@ -330,33 +333,14 @@ export class Broadcaster {
       }
     });
 
-    const room = new Room({
-      adaptiveStream: false, // publisher nao precisa; reduz variacao de latencia
-      /**
-       * dynacast DESLIGADO de proposito, apesar de economizar upload ocioso.
-       *
-       * Ele serve para parar de codificar CAMADAS que ninguem assina, e aqui
-       * simulcast e false: existe uma camada so. Entao nao ha o que gerenciar,
-       * e a unica coisa que ele fazia era pausar essa camada enquanto a sala
-       * estava vazia — o que custava caro na hora que importa.
-       *
-       * Medido: com dynacast ligado e 0 espectadores, a estimativa de banda
-       * apodrecia de 6961 para 5 kbps (nada sendo enviado). O primeiro
-       * espectador religava o encoder a partir desse chao e, como a
-       * degradationPreference e maintain-framerate, o orcamento minusculo ia
-       * todo para 60 fps e sobrava 320x180. A subida ate 1080p levava 24s:
-       *
-       *   320x180 175kbps -> 480x270 -> 1280x720 -> 1920x1080 3023kbps
-       *
-       * Contraprova: reconectar numa transmissao ja quente entregava 1080p58
-       * imediatamente, sem rampa. Ou seja, era cold start, nao por assinante.
-       *
-       * E o primeiro espectador e sempre o amigo que estava esperando o link.
-       * Preferimos gastar upload com a sala vazia a entregar 24s de 180p.
-       */
-      dynacast: false,
-      disconnectOnPageLeave: true,
-    });
+    /**
+     * ROOM_OPTIONS vem de @game-share/shared para o publisher sintetico do e2e
+     * usar exatamente a mesma coisa. Enquanto cada lado tinha a sua copia, o
+     * teste exercitava um publisher diferente do que o usuario recebe — foi
+     * por essa fresta que passou o bug do dynacast (24s de 320x180 para o
+     * primeiro espectador). O porque de cada opcao esta la.
+     */
+    const room = new Room(ROOM_OPTIONS);
     this.room = room;
     this.wireRoomEvents(room);
 
@@ -374,31 +358,16 @@ export class Broadcaster {
     try {
       this.videoTrack = new LocalVideoTrack(videoMst);
       await room.localParticipant.publishTrack(this.videoTrack, {
-        name: 'screen',
+        ...screenShareOptions(preset),
         source: Track.Source.ScreenShare,
-        simulcast: false, // POC: uma camada so, menos CPU e menos latencia
-        /**
-         * `screenShareEncoding`, NAO `videoEncoding`.
-         *
-         * Para source ScreenShare o livekit-client le exclusivamente
-         * screenShareEncoding e ignora videoEncoding em silencio. O padrao e
-         * ScreenSharePresets.h1080fps15, ou seja um teto de 15 FPS. Foi o que
-         * segurou a transmissao em 14-16 fps mesmo depois de a captura passar
-         * a entregar 720p30 certinho.
-         */
-        screenShareEncoding: { maxBitrate: preset.maxBitrate, maxFramerate: preset.frameRate },
-        degradationPreference: 'maintain-framerate', // jogo: preferimos fps a nitidez
       });
       log.info('video publicado', { preset: preset.name });
 
       if (audioMst) {
         this.audioTrack = new LocalAudioTrack(audioMst);
         await room.localParticipant.publishTrack(this.audioTrack, {
-          name: 'system-audio',
+          ...SCREEN_AUDIO_OPTIONS,
           source: Track.Source.ScreenShareAudio,
-          dtx: false, // audio de jogo e continuo; DTX corta trechos
-          red: false,
-          forceStereo: true,
         });
         log.info('audio do sistema publicado');
       }

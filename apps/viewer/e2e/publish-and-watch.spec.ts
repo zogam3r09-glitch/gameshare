@@ -2,6 +2,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import type * as LiveKit from 'livekit-client';
+import {
+  DEFAULT_PRESET,
+  QUALITY_PRESETS,
+  ROOM_OPTIONS,
+  SCREEN_AUDIO_OPTIONS,
+  screenShareOptions,
+} from '@game-share/shared';
 
 /**
  * Teste de ponta a ponta do criterio de aceite "o viewer recebe video".
@@ -28,39 +35,56 @@ interface CreatedRoom {
   livekitUrl: string;
 }
 
-/** Publica video + audio falsos na sala e resolve quando o SFU confirmou. */
+/**
+ * Publica video + audio falsos na sala e resolve quando o SFU confirmou.
+ *
+ * A configuracao NAO e escrita aqui: vem de @game-share/shared, a mesma que o
+ * app usa. Enquanto este publisher tinha a sua propria copia, o e2e exercitava
+ * um publisher diferente do que o usuario recebe, e foi por essa fresta que
+ * passou o bug do dynacast — 24s de 320x180 para o primeiro espectador, que
+ * nenhum teste daqui podia ter pego.
+ *
+ * Sao objetos JSON puros justamente para atravessar o page.evaluate.
+ */
 async function startFakePublisher(page: Page, baseURL: string): Promise<CreatedRoom> {
   await page.goto(baseURL);
   await page.addScriptTag({ path: UMD });
 
-  return page.evaluate(async (tokenServer) => {
-    const lk = (globalThis as unknown as { LivekitClient: typeof LiveKit }).LivekitClient;
+  return page.evaluate(
+    async ({ tokenServer, roomOptions, videoOptions, audioOptions }) => {
+      const lk = (globalThis as unknown as { LivekitClient: typeof LiveKit }).LivekitClient;
 
-    const res = await fetch(`${tokenServer}/api/rooms`, { method: 'POST' });
-    const created = (await res.json()) as CreatedRoom;
+      const res = await fetch(`${tokenServer}/api/rooms`, { method: 'POST' });
+      const created = (await res.json()) as CreatedRoom;
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 640, height: 360, frameRate: 15 },
-      audio: true,
-    });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 360, frameRate: 15 },
+        audio: true,
+      });
 
-    const room = new lk.Room();
-    await room.connect(created.livekitUrl, created.token);
+      const room = new lk.Room(roomOptions);
+      await room.connect(created.livekitUrl, created.token);
 
-    await room.localParticipant.publishTrack(new lk.LocalVideoTrack(stream.getVideoTracks()[0]!), {
-      source: lk.Track.Source.ScreenShare,
-      simulcast: false,
-      // espelha o app: ScreenShare le screenShareEncoding, nao videoEncoding
-      screenShareEncoding: { maxBitrate: 2_500_000, maxFramerate: 30 },
-    });
-    await room.localParticipant.publishTrack(new lk.LocalAudioTrack(stream.getAudioTracks()[0]!), {
-      source: lk.Track.Source.ScreenShareAudio,
-    });
+      await room.localParticipant.publishTrack(new lk.LocalVideoTrack(stream.getVideoTracks()[0]!), {
+        ...videoOptions,
+        source: lk.Track.Source.ScreenShare,
+      });
+      await room.localParticipant.publishTrack(new lk.LocalAudioTrack(stream.getAudioTracks()[0]!), {
+        ...audioOptions,
+        source: lk.Track.Source.ScreenShareAudio,
+      });
 
-    // mantem vivo enquanto a pagina existir
-    (globalThis as unknown as { __room: unknown }).__room = room;
-    return created;
-  }, TOKEN_SERVER);
+      // mantem vivo enquanto a pagina existir
+      (globalThis as unknown as { __room: unknown }).__room = room;
+      return created;
+    },
+    {
+      tokenServer: TOKEN_SERVER,
+      roomOptions: ROOM_OPTIONS,
+      videoOptions: screenShareOptions(QUALITY_PRESETS[DEFAULT_PRESET]),
+      audioOptions: SCREEN_AUDIO_OPTIONS,
+    },
+  );
 }
 
 test.describe('publisher -> viewer', () => {
@@ -174,17 +198,21 @@ test.describe('publisher -> viewer', () => {
      * .h1080fps15 e ficava travada em 15 FPS, independente do que a captura
      * entregasse — sem nenhum erro e com qualityLimitationReason "none".
      */
-    const maxFramerate = await pub.evaluate(() => {
+    const negociado = await pub.evaluate(() => {
       const r = (globalThis as unknown as { __room: LiveKit.Room }).__room;
       const publication = [...r.localParticipant.trackPublications.values()].find(
         (p) => p.kind === 'video',
       );
       // `sender` e getter publico do LocalTrack
-      const params = publication?.track?.sender?.getParameters();
-      return params?.encodings?.[0]?.maxFramerate ?? null;
+      const enc = publication?.track?.sender?.getParameters()?.encodings?.[0];
+      return { maxFramerate: enc?.maxFramerate ?? null, maxBitrate: enc?.maxBitrate ?? null };
     });
 
-    expect(maxFramerate).toBe(30);
+    // Sai do preset, nao de um numero chumbado: se o preset padrao mudar, o
+    // teste acompanha em vez de continuar verde contra um valor obsoleto.
+    const preset = QUALITY_PRESETS[DEFAULT_PRESET];
+    expect(negociado.maxFramerate).toBe(preset.frameRate);
+    expect(negociado.maxBitrate).toBe(preset.maxBitrate);
 
     await pubContext.close();
   });
