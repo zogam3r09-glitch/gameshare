@@ -32,16 +32,19 @@ services:
       - key: TRUST_PROXY
         value: "1"
 
-      # --- preencher no painel (nao ficam no repositorio) ---
+      # Dominio do viewer publicado. Nao e segredo, entao fica versionado aqui
+      # em vez de digitado no painel: assim o valor certo e reproduzivel e nao
+      # depende de ninguem lembrar de atualizar os dois lugares.
+      - key: ALLOWED_ORIGINS
+        value: https://gameshare-29b.pages.dev
+      # base do link /watch/:roomId que o desktop mostra e copia
+      - key: VITE_VIEWER_BASE_URL
+        value: https://gameshare-29b.pages.dev
+
+      # --- segredos: preencher no painel, nunca no repositorio ---
       - key: LIVEKIT_URL
         sync: false
       - key: LIVEKIT_API_KEY
         sync: false
       - key: LIVEKIT_API_SECRET
-        sync: false
-      # dominio exato do viewer, sem barra final
-      - key: ALLOWED_ORIGINS
-        sync: false
-      # mesma coisa: e a base do link /watch/:roomId que o desktop mostra
-      - key: VITE_VIEWER_BASE_URL
         sync: false
