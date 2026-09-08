@@ -332,7 +332,29 @@ export class Broadcaster {
 
     const room = new Room({
       adaptiveStream: false, // publisher nao precisa; reduz variacao de latencia
-      dynacast: true, // para de codificar camadas que ninguem assina
+      /**
+       * dynacast DESLIGADO de proposito, apesar de economizar upload ocioso.
+       *
+       * Ele serve para parar de codificar CAMADAS que ninguem assina, e aqui
+       * simulcast e false: existe uma camada so. Entao nao ha o que gerenciar,
+       * e a unica coisa que ele fazia era pausar essa camada enquanto a sala
+       * estava vazia — o que custava caro na hora que importa.
+       *
+       * Medido: com dynacast ligado e 0 espectadores, a estimativa de banda
+       * apodrecia de 6961 para 5 kbps (nada sendo enviado). O primeiro
+       * espectador religava o encoder a partir desse chao e, como a
+       * degradationPreference e maintain-framerate, o orcamento minusculo ia
+       * todo para 60 fps e sobrava 320x180. A subida ate 1080p levava 24s:
+       *
+       *   320x180 175kbps -> 480x270 -> 1280x720 -> 1920x1080 3023kbps
+       *
+       * Contraprova: reconectar numa transmissao ja quente entregava 1080p58
+       * imediatamente, sem rampa. Ou seja, era cold start, nao por assinante.
+       *
+       * E o primeiro espectador e sempre o amigo que estava esperando o link.
+       * Preferimos gastar upload com a sala vazia a entregar 24s de 180p.
+       */
+      dynacast: false,
       disconnectOnPageLeave: true,
     });
     this.room = room;
