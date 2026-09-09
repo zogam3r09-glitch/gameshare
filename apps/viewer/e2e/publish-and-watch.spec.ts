@@ -299,6 +299,62 @@ test.describe('publisher -> viewer', () => {
     await pubContext.close();
   });
 
+  /**
+   * No celular a barra flutuante era inalcancavel: ela so acordava com
+   * `mousemove`, evento que nao existe em toque. Abria, sumia 2,5 s depois e
+   * nao voltava — sem tela cheia, sem volume, sem status, para sempre.
+   */
+  test('no celular, tocar na tela traz a barra de volta', async ({ browser, baseURL }) => {
+    const pubContext = await browser.newContext();
+    const pub = await pubContext.newPage();
+
+    let room: CreatedRoom;
+    try {
+      room = await startFakePublisher(pub, baseURL!);
+    } catch (err) {
+      await pubContext.close();
+      test.skip(true, `LiveKit indisponivel: ${String(err)}`);
+      return;
+    }
+
+    // celular de verdade: viewport pequena, toque, e sem mouse
+    const celular = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+    });
+    const viewer = await celular.newPage();
+    await viewer.goto(`/watch/${room.roomId}`);
+
+    const video = viewer.locator('video.stage--on');
+    await expect(video).toBeVisible({ timeout: 20_000 });
+
+    const barra = viewer.locator('footer.bar');
+    // depois de 2,5s parada a barra se esconde sozinha
+    await expect(barra).toHaveClass(/bar--hidden/, { timeout: 10_000 });
+
+    // o toque e o unico jeito de traze-la de volta num aparelho sem mouse
+    await video.tap();
+    await expect(barra).not.toHaveClass(/bar--hidden/);
+
+    // e tocar de novo esconde, como em qualquer player
+    await video.tap();
+    await expect(barra).toHaveClass(/bar--hidden/);
+
+    // a pagina nunca rola em retrato, mesmo com a barra podendo quebrar linha
+    await expect
+      .poll(() =>
+        viewer.evaluate(() => {
+          const d = document.documentElement;
+          return { v: d.scrollHeight - d.clientHeight, h: d.scrollWidth - d.clientWidth };
+        }),
+      )
+      .toEqual({ v: 0, h: 0 });
+
+    await celular.close();
+    await pubContext.close();
+  });
+
   test('um espectador nao consegue encerrar a transmissao de outra pessoa', async ({
     browser,
     baseURL,

@@ -34,39 +34,76 @@ function Watch({ roomId }: { roomId: string }): React.JSX.Element {
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
 
-  // A barra some depois de um tempo parado para o video ocupar a tela inteira.
+  /**
+   * A barra some depois de um tempo parado para o video ocupar a tela inteira.
+   *
+   * Precisa tratar toque separado do mouse. Antes so ouvia `mousemove`, e em
+   * celular esse evento nao existe: a barra sumia 2,5 s depois de abrir e nao
+   * voltava nunca, deixando o espectador sem tela cheia, sem volume e sem
+   * status. No toque a regra e outra — toque na tela alterna a barra, como em
+   * qualquer player de video.
+   */
   const [idle, setIdle] = useState(false);
   useEffect(() => {
     const shell = shellRef.current;
     if (!shell) return;
 
     let timer: ReturnType<typeof setTimeout>;
-    const wake = (): void => {
+    const acordar = (): void => {
       setIdle(false);
       clearTimeout(timer);
       timer = setTimeout(() => setIdle(true), 2500);
     };
-    const sleep = (): void => {
+    const dormir = (): void => {
       clearTimeout(timer);
       setIdle(true);
     };
 
-    wake();
-    shell.addEventListener('mousemove', wake);
-    shell.addEventListener('mouseleave', sleep);
+    const aoMover = (e: PointerEvent): void => {
+      if (e.pointerType === 'mouse') acordar();
+    };
+    const aoTocar = (e: PointerEvent): void => {
+      if (e.pointerType === 'mouse') return;
+      // toque nos proprios controles nao deve fechar a barra
+      if ((e.target as HTMLElement).closest('.bar')) return;
+      setIdle((escondida) => !escondida);
+    };
+
+    acordar();
+    shell.addEventListener('pointermove', aoMover);
+    shell.addEventListener('pointerup', aoTocar);
+    shell.addEventListener('mouseleave', dormir);
     return () => {
       clearTimeout(timer);
-      shell.removeEventListener('mousemove', wake);
-      shell.removeEventListener('mouseleave', sleep);
+      shell.removeEventListener('pointermove', aoMover);
+      shell.removeEventListener('pointerup', aoTocar);
+      shell.removeEventListener('mouseleave', dormir);
     };
   }, []);
 
   // so escondemos a barra enquanto o video roda; nos outros estados ela informa
   const chromeHidden = idle && watch.phase === 'playing';
 
+  /**
+   * O iPhone nao implementa a Fullscreen API em elemento qualquer — so o
+   * proprio <video> sabe entrar em tela cheia, por `webkitEnterFullscreen`.
+   * Sem este caminho o botao existe e nao faz nada no celular da Apple, que e
+   * metade dos espectadores que chegam por link.
+   */
   const toggleFullscreen = (): void => {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void shellRef.current?.requestFullscreen();
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+      return;
+    }
+    const shell = shellRef.current;
+    if (shell?.requestFullscreen) {
+      void shell.requestFullscreen();
+      return;
+    }
+    const video = watch.videoRef.current as
+      | (HTMLVideoElement & { webkitEnterFullscreen?: () => void })
+      | null;
+    video?.webkitEnterFullscreen?.();
   };
 
   return (
