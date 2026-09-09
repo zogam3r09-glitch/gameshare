@@ -36,7 +36,15 @@ export const ROOM_OPTIONS = {
   disconnectOnPageLeave: true,
 } as const;
 
-/** POC: uma camada so, menos CPU e menos latencia. */
+/**
+ * Padrao atual: uma camada so.
+ *
+ * Simulcast e pre-requisito do modelo de planos — sem camadas, todos na sala
+ * recebem a mesma qualidade e nao existe cota por pessoa. Mas ligar significa
+ * codificar tres versoes ao mesmo tempo, e a medicao de codec mostrou que NAO
+ * ha aceleracao por hardware nesta plataforma: sao tres encoders de software
+ * disputando a CPU com o jogo. Por isso o valor so muda depois de medido.
+ */
 export const SCREEN_SHARE_SIMULCAST = false;
 
 /**
@@ -57,10 +65,14 @@ export const DEFAULT_VIDEO_CODEC: VideoCodec = 'vp8';
  * livekit-client le exclusivamente o primeiro e ignora o segundo em silencio,
  * caindo no padrao ScreenSharePresets.h1080fps15 — um teto de 15 FPS.
  */
-export function screenShareOptions(preset: QualityPreset, codec: VideoCodec = DEFAULT_VIDEO_CODEC) {
+export function screenShareOptions(
+  preset: QualityPreset,
+  codec: VideoCodec = DEFAULT_VIDEO_CODEC,
+  simulcast: boolean = SCREEN_SHARE_SIMULCAST,
+) {
   return {
     name: 'screen',
-    simulcast: SCREEN_SHARE_SIMULCAST,
+    simulcast,
     screenShareEncoding: { maxBitrate: preset.maxBitrate, maxFramerate: preset.frameRate },
     /** jogo: preferimos fps a nitidez */
     degradationPreference: 'maintain-framerate',

@@ -60,10 +60,34 @@ export function lerAmostra(report: RTCStatsReport): RtcSample {
     const s = entry as Bruto;
 
     if (s.type === 'outbound-rtp' && s.kind === 'video') {
-      const fps = numero(s.framesPerSecond);
-      if (fps !== null) out.encodedFps = Math.round(fps);
+      /**
+       * Com simulcast ha UMA ENTRADA POR CAMADA, e a ordem em que elas
+       * aparecem no report nao e garantida. Antes cada campo era sobrescrito
+       * pela ultima camada iterada, e o painel passou a mostrar "960x540"
+       * numa transmissao cuja camada de cima era 1080p — medido ao ligar
+       * simulcast. Resolucao e fps agora vem da MAIOR camada, que e a que
+       * descreve a transmissao.
+       */
+      const largura = numero(s.frameWidth);
+      const altura = numero(s.frameHeight);
+      const area = (largura ?? 0) * (altura ?? 0);
+      const maiorAte = (out.encodedWidth ?? 0) * (out.encodedHeight ?? 0);
 
-      // somado: com simulcast haveria uma entrada por camada
+      if (area >= maiorAte) {
+        out.encodedWidth = largura ?? out.encodedWidth;
+        out.encodedHeight = altura ?? out.encodedHeight;
+        const fps = numero(s.framesPerSecond);
+        if (fps !== null) out.encodedFps = Math.round(fps);
+      }
+
+      /**
+       * Somado entre camadas: e o que o PUBLISHER sobe.
+       *
+       * CUIDADO ao usar isto para cobrar: o servidor manda UMA camada para
+       * cada espectador, nao todas. Multiplicar esta soma pelo numero de
+       * espectadores superestima a saida assim que simulcast entra. Com
+       * simulcast ligado, a cobranca precisa vir dos webhooks do LiveKit.
+       */
       const bytes = numero(s.bytesSent);
       if (bytes !== null) out.videoBytesSent = (out.videoBytesSent ?? 0) + bytes;
 
@@ -71,8 +95,6 @@ export function lerAmostra(report: RTCStatsReport): RtcSample {
       out.limitedBy = texto(s.qualityLimitationReason) ?? out.limitedBy;
       out.nack = numero(s.nackCount) ?? out.nack;
       out.pli = numero(s.pliCount) ?? out.pli;
-      out.encodedWidth = numero(s.frameWidth) ?? out.encodedWidth;
-      out.encodedHeight = numero(s.frameHeight) ?? out.encodedHeight;
 
       /**
        * Acumulado por motivo, ao contrario de qualityLimitationReason, que e

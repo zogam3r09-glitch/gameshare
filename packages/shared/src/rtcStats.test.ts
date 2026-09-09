@@ -113,6 +113,48 @@ describe('lerAmostra (envio)', () => {
   });
 });
 
+describe('lerAmostra com simulcast', () => {
+  /**
+   * Medido ao ligar simulcast: o report traz uma entrada por camada, em ordem
+   * nao garantida, e o painel passou a mostrar 960x540 numa transmissao cuja
+   * camada de cima era 1920x1080. A camada menor vem primeiro aqui, que e o
+   * caso que quebrava.
+   */
+  it('resolucao e fps vem da maior camada, nao da ultima lida', () => {
+    const a = lerAmostra(
+      relatorio(
+        { type: 'outbound-rtp', kind: 'video', rid: 'q', frameWidth: 960, frameHeight: 540, framesPerSecond: 30, bytesSent: 7_757_531 },
+        { type: 'outbound-rtp', kind: 'video', rid: 'h', frameWidth: 1920, frameHeight: 1080, framesPerSecond: 32, bytesSent: 6_426_443 },
+      ),
+    );
+    expect(a.encodedWidth).toBe(1920);
+    expect(a.encodedHeight).toBe(1080);
+    expect(a.encodedFps).toBe(32);
+  });
+
+  it('mesmo com a maior camada vindo primeiro', () => {
+    const a = lerAmostra(
+      relatorio(
+        { type: 'outbound-rtp', kind: 'video', rid: 'h', frameWidth: 1920, frameHeight: 1080, framesPerSecond: 32, bytesSent: 6_426_443 },
+        { type: 'outbound-rtp', kind: 'video', rid: 'q', frameWidth: 960, frameHeight: 540, framesPerSecond: 30, bytesSent: 7_757_531 },
+      ),
+    );
+    expect(a.encodedWidth).toBe(1920);
+    expect(a.encodedFps).toBe(32);
+  });
+
+  /** Bytes sao o que o publisher SOBE, entao somam entre camadas. */
+  it('bytes somam todas as camadas', () => {
+    const a = lerAmostra(
+      relatorio(
+        { type: 'outbound-rtp', kind: 'video', frameWidth: 960, frameHeight: 540, bytesSent: 100 },
+        { type: 'outbound-rtp', kind: 'video', frameWidth: 1920, frameHeight: 1080, bytesSent: 250 },
+      ),
+    );
+    expect(a.videoBytesSent).toBe(350);
+  });
+});
+
 describe('lerAmostraEntrada (recepcao)', () => {
   it('le fps, congelamentos e perda', () => {
     const a = lerAmostraEntrada(

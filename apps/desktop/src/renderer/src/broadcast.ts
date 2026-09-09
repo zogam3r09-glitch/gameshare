@@ -14,6 +14,7 @@ import {
   DEFAULT_VIDEO_CODEC,
   type VideoCodec,
   ROOM_OPTIONS,
+  SCREEN_SHARE_SIMULCAST,
   SCREEN_AUDIO_OPTIONS,
   screenShareOptions,
   createLogger,
@@ -113,6 +114,8 @@ export interface BroadcastState {
   codec: VideoCodec;
   /** moedas consumidas nesta sessao, por bytes reais x espectadores */
   moedasGastas: number;
+  /** experimento de simulcast; sem UI, ver setSimulcast */
+  simulcast: boolean;
   /** gravar os ultimos segundos para clipar; custa CPU, entao e opcional */
   clipeLigado: boolean;
   /** segundos ja disponiveis no buffer, 0 quando desligado */
@@ -157,6 +160,7 @@ const INITIAL: BroadcastState = {
   preset: DEFAULT_PRESET,
   codec: DEFAULT_VIDEO_CODEC,
   moedasGastas: 0,
+  simulcast: SCREEN_SHARE_SIMULCAST,
   // Ligado por padrao: clipe que exige lembrar de ligar antes nao clipa nada,
   // porque quando a jogada acontece ela ja passou. Da para desligar se pesar.
   clipeLigado: true,
@@ -295,6 +299,13 @@ export class Broadcaster {
    * Liga ou desliga o buffer. Fica LIGADO por padrao — ver o comentario no
    * estado inicial. Desligar existe para quem sentir o custo de CPU no jogo.
    */
+  /** Experimento: ver se tres camadas cabem na CPU. Sem UI, como o codec. */
+  setSimulcast(ligado: boolean): void {
+    if (this.state.phase === 'choosing' || this.state.phase === 'idle') {
+      this.set({ simulcast: ligado });
+    }
+  }
+
   setClipe(ligado: boolean): void {
     this.set({ clipeLigado: ligado });
     if (!ligado) {
@@ -451,10 +462,14 @@ export class Broadcaster {
     try {
       this.videoTrack = new LocalVideoTrack(videoMst);
       await room.localParticipant.publishTrack(this.videoTrack, {
-        ...screenShareOptions(preset, this.state.codec),
+        ...screenShareOptions(preset, this.state.codec, this.state.simulcast),
         source: Track.Source.ScreenShare,
       });
-      log.info('video publicado', { preset: preset.name, codec: this.state.codec });
+      log.info('video publicado', {
+        preset: preset.name,
+        codec: this.state.codec,
+        simulcast: this.state.simulcast,
+      });
 
       if (audioMst) {
         this.audioTrack = new LocalAudioTrack(audioMst);
