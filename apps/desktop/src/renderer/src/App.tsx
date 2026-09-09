@@ -246,6 +246,8 @@ function LivePanel({ state }: { state: BroadcastState }): React.JSX.Element {
             Qualidade, o nome antigo sugeria que era o preset escolhido. */}
         <Stat label="Conexão" value={QUALITY_LABEL[stats.quality]} />
         <Stat label="Áudio do sistema" value={stats.hasAudio ? 'Ativo' : 'Sem áudio'} />
+        {/* Bytes reais x espectadores do momento. E o que um plano cobraria. */}
+        <Stat label="Consumo" value={`${state.moedasGastas.toLocaleString('pt-BR')} moedas`} />
       </dl>
 
       <label className="link">

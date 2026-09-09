@@ -21,6 +21,7 @@ import {
   isViewerIdentity,
   kbpsEntreAmostras,
   lerAmostra,
+  moedasDeBytes,
   type MarcaBytes,
   type CaptureSource,
   type CreateRoomResponse,
@@ -110,6 +111,8 @@ export interface BroadcastState {
   preset: QualityPresetName;
   /** experimento de codec; sem UI, ver setCodec */
   codec: VideoCodec;
+  /** moedas consumidas nesta sessao, por bytes reais x espectadores */
+  moedasGastas: number;
   /** gravar os ultimos segundos para clipar; custa CPU, entao e opcional */
   clipeLigado: boolean;
   /** segundos ja disponiveis no buffer, 0 quando desligado */
@@ -153,6 +156,7 @@ const INITIAL: BroadcastState = {
   selectedSourceId: null,
   preset: DEFAULT_PRESET,
   codec: DEFAULT_VIDEO_CODEC,
+  moedasGastas: 0,
   // Ligado por padrao: clipe que exige lembrar de ligar antes nao clipa nada,
   // porque quando a jogada acontece ela ja passou. Da para desligar se pesar.
   clipeLigado: true,
@@ -191,6 +195,9 @@ export class Broadcaster {
   private audioTrack: LocalAudioTrack | null = null;
   private statsTimer: ReturnType<typeof setInterval> | null = null;
   private lastBytesSent: MarcaBytes | null = null;
+  /** ultimo total ja cobrado, para integrar so o que chegou desde a amostra anterior */
+  private ultimoBytesCobrados: number | null = null;
+  private moedasAcumuladas = 0;
   private statsTick = 0;
   private readonly clipe = new ClipBuffer(CLIPE_SEGUNDOS);
 
@@ -530,6 +537,9 @@ export class Broadcaster {
   private startStatsPolling(): void {
     this.stopStatsPolling();
     this.lastBytesSent = null;
+    // consumo e por transmissao: comecar do zero a cada start
+    this.ultimoBytesCobrados = null;
+    this.moedasAcumuladas = 0;
     const tick = (): void => void this.sampleStats();
     tick();
     this.statsTimer = setInterval(tick, 1500);
@@ -567,6 +577,26 @@ export class Broadcaster {
       const marca = { bytes: amostra.videoBytesSent, at: performance.now() };
       videoKbps = kbpsEntreAmostras(this.lastBytesSent, marca) ?? videoKbps;
       this.lastBytesSent = marca;
+
+      /**
+       * Consumo real da sessao, integrado amostra a amostra.
+       *
+       * Multiplica pelos espectadores DO MOMENTO porque o custo e a saida do
+       * servidor: seu PC sobe uma copia, e o servidor manda uma para cada
+       * pessoa assistindo. Integrar incrementalmente, em vez de multiplicar o
+       * total no fim, e o que faz a conta acompanhar quem entra e quem sai no
+       * meio da transmissao.
+       *
+       * `moedasDeBytes` zera delta negativo, que acontece quando o contador
+       * reinicia numa reconexao — senao viraria credito.
+       *
+       * Conta so video. Audio e ~2% do volume e nao aparece em `lerAmostra`.
+       */
+      if (this.ultimoBytesCobrados !== null) {
+        const delta = amostra.videoBytesSent - this.ultimoBytesCobrados;
+        this.moedasAcumuladas += moedasDeBytes(delta) * this.state.stats.viewers;
+      }
+      this.ultimoBytesCobrados = amostra.videoBytesSent;
     }
 
     const {
@@ -604,6 +634,9 @@ export class Broadcaster {
 
     // Uma linha a cada ~6s no terminal. Sem isto o diagnostico so existe na
     // UI, e ninguem consegue reconstruir depois o que aconteceu durante o jogo.
+    const moedas = Math.round(this.moedasAcumuladas);
+    if (moedas !== this.state.moedasGastas) this.set({ moedasGastas: moedas });
+
     if (this.state.clipeLigado) {
       const disponivel = Math.round(this.clipe.disponivel);
       if (disponivel !== this.state.clipeSegundos) this.set({ clipeSegundos: disponivel });
@@ -633,6 +666,7 @@ export class Broadcaster {
         pli,
         quadrosPerdidos: framesDropped,
         espectadores: s.viewers,
+        moedas: this.state.moedasGastas,
       });
     }
   }
