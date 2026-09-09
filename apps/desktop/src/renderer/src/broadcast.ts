@@ -239,9 +239,13 @@ export class Broadcaster {
   async createBroadcast(): Promise<void> {
     this.set({ phase: 'creating', error: null, notice: null });
     try {
-      const room = await createRoom();
+      const room = await createRoom(() =>
+        this.set({
+          notice: 'O servidor pode estar hibernando. Acordar leva até um minuto na primeira vez.',
+        }),
+      );
       log.info('sala criada', { roomId: room.roomId, watchUrl: room.watchUrl });
-      this.set({ phase: 'choosing', room });
+      this.set({ phase: 'choosing', room, notice: null });
       await this.refreshSources();
     } catch (err) {
       const msg =

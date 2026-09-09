@@ -247,12 +247,15 @@ export function useWatchRoom(roomId: string): UseWatchRoom {
 
     void (async () => {
       try {
-        const { token, livekitUrl } = await fetchViewerToken(roomId);
+        const { token, livekitUrl } = await fetchViewerToken(roomId, () =>
+          patch({ notice: 'Acordando o servidor… isso pode levar até um minuto.' }),
+        );
         if (cancelled) return;
         await room.connect(livekitUrl, token);
         if (cancelled) return;
 
         log.info('conectado', { roomId });
+        patch({ notice: null });
         // as tracks podem ter sido assinadas durante o connect acima
         sync();
       } catch (err) {
