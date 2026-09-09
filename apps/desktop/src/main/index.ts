@@ -3,9 +3,12 @@ import { writeFile } from 'node:fs/promises';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell } from 'electron';
 import { createLogger, errorMessage } from '@game-share/shared';
 import {
+  armMicrophone,
   armSource,
+  disarmMicrophone,
   disarmSource,
   isLoopbackAudioAvailable,
+  isMicrophoneArmed,
   isSourceArmed,
   listSources,
   markLoopbackUnavailable,
@@ -79,7 +82,11 @@ function applySecurityHeaders(): void {
  */
 function allowPermission(permission: string): boolean {
   if (permission === 'display-capture') return true;
-  if (permission === 'media') return isSourceArmed();
+  // `media` cobre camera, microfone e captura de tela no Chromium. Passa so
+  // enquanto o usuario acabou de pedir um dos dois — e mesmo com o microfone
+  // armado, capturar tela continua exigindo uma fonte escolhida na UI, porque
+  // o handler de getDisplayMedia checa isso por conta propria.
+  if (permission === 'media') return isSourceArmed() || isMicrophoneArmed();
   return false;
 }
 
@@ -218,6 +225,13 @@ function registerIpc(): void {
   });
 
   ipcMain.handle('capture:loopbackSupported', () => isLoopbackAudioAvailable());
+
+  ipcMain.handle('mic:arm', () => {
+    armMicrophone();
+  });
+  ipcMain.handle('mic:disarm', () => {
+    disarmMicrophone();
+  });
 
   ipcMain.handle('app:setBroadcasting', (_e, live: unknown) => {
     broadcasting = live === true;

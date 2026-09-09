@@ -327,6 +327,12 @@ body {
   user-select: text;
 }
 
+.btn--on {
+  border-color: #2ea043;
+  color: #3fb950;
+  background: rgb(46 160 67 / 12%);
+}
+
 .clipe {
   display: flex;
   align-items: center;

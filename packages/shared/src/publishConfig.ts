@@ -87,3 +87,34 @@ export const SCREEN_AUDIO_OPTIONS = {
   red: false,
   forceStereo: true,
 } as const;
+
+/**
+ * Microfone: o oposto do audio do sistema em quase tudo.
+ *
+ * `dtx: true` porque voz TEM silencio, e nao mandar nada enquanto ninguem fala
+ * e o que faz uma call de oito pessoas caber em 43 moedas por hora em vez de
+ * 151. `red` liga redundancia, que em voz vale a banda extra: perder um pacote
+ * de fala e perder uma silaba. Mono de proposito — voz nao tem estereo, e
+ * forcar dobraria a banda por nada.
+ */
+export const MICROPHONE_OPTIONS = {
+  name: 'mic',
+  dtx: true,
+  red: true,
+  forceStereo: false,
+} as const;
+
+/**
+ * Constraints do getUserMedia para voz.
+ *
+ * O cancelamento de eco aqui cobre microfone contra alto-falante. Ele NAO
+ * cobre o eco de loopback: a captura de audio do sistema le a mistura final da
+ * placa, depois do ponto onde este cancelamento atua. Esse caso e tratado por
+ * deteccao, ver o documento de estrutura de voz.
+ */
+export const MICROPHONE_CONSTRAINTS = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+  channelCount: 1,
+} as const;

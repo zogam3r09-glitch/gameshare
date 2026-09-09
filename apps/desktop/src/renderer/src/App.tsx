@@ -311,6 +311,18 @@ function LivePanel({ state }: { state: BroadcastState }): React.JSX.Element {
       </label>
 
       <div className="panel__foot">
+        <button
+          className={`btn ${state.micLigado ? 'btn--on' : ''}`}
+          disabled={state.micOcupado}
+          onClick={() => void broadcaster.toggleMic()}
+          title="Sua voz vai para quem está assistindo"
+        >
+          {state.micOcupado
+            ? 'ABRINDO…'
+            : state.micLigado
+              ? '🎙 MICROFONE LIGADO'
+              : '🎙 LIGAR MICROFONE'}
+        </button>
         {state.clipeLigado && (
           <button
             className="btn"

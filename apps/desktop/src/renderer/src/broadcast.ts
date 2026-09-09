@@ -16,6 +16,8 @@ import {
   ROOM_OPTIONS,
   SCREEN_SHARE_SIMULCAST,
   SCREEN_AUDIO_OPTIONS,
+  MICROPHONE_OPTIONS,
+  MICROPHONE_CONSTRAINTS,
   screenShareOptions,
   createLogger,
   errorMessage,
@@ -116,6 +118,10 @@ export interface BroadcastState {
   moedasGastas: number;
   /** experimento de simulcast; sem UI, ver setSimulcast */
   simulcast: boolean;
+  /** microfone publicado e nao mutado */
+  micLigado: boolean;
+  /** true entre o clique e o getUserMedia resolver */
+  micOcupado: boolean;
   /** gravar os ultimos segundos para clipar; custa CPU, entao e opcional */
   clipeLigado: boolean;
   /** segundos ja disponiveis no buffer, 0 quando desligado */
@@ -161,6 +167,8 @@ const INITIAL: BroadcastState = {
   codec: DEFAULT_VIDEO_CODEC,
   moedasGastas: 0,
   simulcast: SCREEN_SHARE_SIMULCAST,
+  micLigado: false,
+  micOcupado: false,
   // Ligado por padrao: clipe que exige lembrar de ligar antes nao clipa nada,
   // porque quando a jogada acontece ela ja passou. Da para desligar se pesar.
   clipeLigado: true,
@@ -197,6 +205,7 @@ export class Broadcaster {
   private stream: MediaStream | null = null;
   private videoTrack: LocalVideoTrack | null = null;
   private audioTrack: LocalAudioTrack | null = null;
+  private micTrack: LocalAudioTrack | null = null;
   private statsTimer: ReturnType<typeof setInterval> | null = null;
   private lastBytesSent: MarcaBytes | null = null;
   /** ultimo total ja cobrado, para integrar so o que chegou desde a amostra anterior */
@@ -303,6 +312,61 @@ export class Broadcaster {
    * Liga ou desliga o buffer. Fica LIGADO por padrao — ver o comentario no
    * estado inicial. Desligar existe para quem sentir o custo de CPU no jogo.
    */
+  /**
+   * Liga ou desliga o microfone durante a transmissao.
+   *
+   * Publica de verdade na primeira vez e depois so muta, em vez de despublicar
+   * e republicar: reassinar a faixa a cada clique faria o audio sumir e voltar
+   * para todo mundo na sala. Mutar mantem a faixa e para de mandar dados.
+   */
+  async toggleMic(): Promise<void> {
+    if (this.state.phase !== 'live' || this.state.micOcupado) return;
+
+    if (this.micTrack) {
+      const ligar = !this.state.micLigado;
+      await (ligar ? this.micTrack.unmute() : this.micTrack.mute());
+      this.set({ micLigado: ligar });
+      log.info(ligar ? 'microfone ligado' : 'microfone mutado');
+      return;
+    }
+
+    const room = this.room;
+    if (!room) return;
+
+    this.set({ micOcupado: true });
+    // janela estreita em que o main aceita o pedido; ver capture.ts
+    await window.gameShare.armMicrophone();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: MICROPHONE_CONSTRAINTS,
+      });
+      const faixa = stream.getAudioTracks()[0];
+      if (!faixa) throw new Error('nenhuma faixa de microfone');
+
+      this.micTrack = new LocalAudioTrack(faixa);
+      await room.localParticipant.publishTrack(this.micTrack, {
+        ...MICROPHONE_OPTIONS,
+        source: Track.Source.Microphone,
+      });
+      this.set({ micLigado: true, notice: null });
+      log.info('microfone publicado', { label: faixa.label });
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : '';
+      this.set({
+        notice:
+          name === 'NotAllowedError'
+            ? 'Permissão de microfone negada. Autorize em Configurações do Windows → Privacidade e segurança → Microfone.'
+            : name === 'NotFoundError'
+              ? 'Nenhum microfone encontrado.'
+              : `Não foi possível abrir o microfone: ${errorMessage(err)}`,
+      });
+      log.warn('falha ao abrir microfone', { message: errorMessage(err) });
+    } finally {
+      await window.gameShare.disarmMicrophone();
+      this.set({ micOcupado: false });
+    }
+  }
+
   /** Experimento: ver se tres camadas cabem na CPU. Sem UI, como o codec. */
   setSimulcast(ligado: boolean): void {
     if (this.state.phase === 'choosing' || this.state.phase === 'idle') {
@@ -747,6 +811,13 @@ export class Broadcaster {
     }
     this.videoTrack = null;
     this.audioTrack = null;
+
+    // O microfone e capturado separado da tela, entao nao e parado pelo
+    // `stream` abaixo. Sem isto o indicador do Windows fica aceso depois de
+    // encerrar a transmissao, o que e alarmante e com razao.
+    this.micTrack?.mediaStreamTrack.stop();
+    this.micTrack = null;
+    this.set({ micLigado: false, micOcupado: false });
 
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;

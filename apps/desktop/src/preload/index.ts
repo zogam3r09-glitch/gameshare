@@ -19,6 +19,9 @@ const api = {
   clearCaptureSource: (): Promise<void> => ipcRenderer.invoke('capture:clear'),
   reportAudioUnavailable: (): Promise<void> => ipcRenderer.invoke('capture:audioUnavailable'),
   isLoopbackAudioSupported: (): Promise<boolean> => ipcRenderer.invoke('capture:loopbackSupported'),
+  /** Abre a janela em que o main aceita o pedido de microfone. Ver capture.ts. */
+  armMicrophone: (): Promise<void> => ipcRenderer.invoke('mic:arm'),
+  disarmMicrophone: (): Promise<void> => ipcRenderer.invoke('mic:disarm'),
   /** Devolve o caminho salvo, ou null se o usuario cancelou ou falhou. */
   saveClip: (bytes: Uint8Array, nome: string): Promise<string | null> =>
     ipcRenderer.invoke('clip:save', bytes, nome),

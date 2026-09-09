@@ -23,6 +23,31 @@ export function isSourceArmed(): boolean {
   return armedSourceId !== null;
 }
 
+/**
+ * Mesma ideia da fonte de captura, para o microfone: so fica armado na janela
+ * entre o clique do usuario no botao de microfone e o getUserMedia resolver.
+ *
+ * Precisa existir porque o Chromium pede a MESMA permissao (`media`) para
+ * camera, microfone e captura de tela. Sem separar, ou o microfone nunca
+ * funciona, ou `media` fica liberada o tempo todo e a trava perde o sentido.
+ * Armar por gesto do usuario mantem a janela estreita nos dois casos.
+ */
+let micArmed = false;
+
+export function isMicrophoneArmed(): boolean {
+  return micArmed;
+}
+
+export function armMicrophone(): void {
+  micArmed = true;
+  log.debug('microfone armado');
+}
+
+export function disarmMicrophone(): void {
+  if (micArmed) log.debug('microfone desarmado');
+  micArmed = false;
+}
+
 function toCaptureSource(source: DesktopCapturerSource, screenIndex: number): CaptureSource {
   const isScreen = source.id.startsWith('screen:');
   let thumbnailDataUrl = '';
