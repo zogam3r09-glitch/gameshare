@@ -11,6 +11,8 @@ import {
 import {
   QUALITY_PRESETS,
   DEFAULT_PRESET,
+  DEFAULT_VIDEO_CODEC,
+  type VideoCodec,
   ROOM_OPTIONS,
   SCREEN_AUDIO_OPTIONS,
   screenShareOptions,
@@ -105,6 +107,8 @@ export interface BroadcastState {
   sourcesLoading: boolean;
   selectedSourceId: string | null;
   preset: QualityPresetName;
+  /** experimento de codec; sem UI, ver setCodec */
+  codec: VideoCodec;
   stats: LiveStats;
   /** erro fatal: a UI mostra a tela de erro */
   error: string | null;
@@ -143,6 +147,7 @@ const INITIAL: BroadcastState = {
   sourcesLoading: false,
   selectedSourceId: null,
   preset: DEFAULT_PRESET,
+  codec: DEFAULT_VIDEO_CODEC,
   stats: EMPTY_STATS,
   error: null,
   notice: null,
@@ -246,6 +251,17 @@ export class Broadcaster {
   /** Só tem efeito antes de iniciar: o preset é aplicado na captura. */
   setPreset(preset: QualityPresetName): void {
     if (this.state.phase === 'choosing') this.set({ preset });
+  }
+
+  /**
+   * Codec de video, para medir se aceleracao por hardware engata.
+   *
+   * Sem UI de proposito: e experimento, nao configuracao de usuario. Enquanto
+   * `encoderImplementation` disser "libvpx" a codificacao e por software e
+   * disputa CPU com o jogo; a pergunta e se h264 muda isso nesta maquina.
+   */
+  setCodec(codec: VideoCodec): void {
+    if (this.state.phase === 'choosing' || this.state.phase === 'idle') this.set({ codec });
   }
 
   // -------------------------------------------------------------------------
@@ -374,10 +390,10 @@ export class Broadcaster {
     try {
       this.videoTrack = new LocalVideoTrack(videoMst);
       await room.localParticipant.publishTrack(this.videoTrack, {
-        ...screenShareOptions(preset),
+        ...screenShareOptions(preset, this.state.codec),
         source: Track.Source.ScreenShare,
       });
-      log.info('video publicado', { preset: preset.name });
+      log.info('video publicado', { preset: preset.name, codec: this.state.codec });
 
       if (audioMst) {
         this.audioTrack = new LocalAudioTrack(audioMst);
@@ -534,6 +550,7 @@ export class Broadcaster {
       const s = this.state.stats;
       const wanted = QUALITY_PRESETS[this.state.preset];
       log.info('metricas', {
+        codec: this.state.codec,
         pedido: `${wanted.width}x${wanted.height}@${wanted.frameRate}`,
         capturado: s.width && s.height ? `${s.width}x${s.height}` : null,
         // se for menor que `capturado`, o encoder reduziu para segurar o fps

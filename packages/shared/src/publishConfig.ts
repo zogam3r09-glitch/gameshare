@@ -40,17 +40,31 @@ export const ROOM_OPTIONS = {
 export const SCREEN_SHARE_SIMULCAST = false;
 
 /**
+ * Codecs que o livekit-client aceita para video.
+ *
+ * vp8 e o padrao e o unico medido ate agora: `encoderImplementation` volta
+ * "libvpx", ou seja software puro. h264 e o candidato a engatar aceleracao por
+ * hardware no Windows (MediaFoundation/AMF); vp9 e av1 economizam bits mas
+ * custam CPU. Trocar aqui e o experimento que responde se da para transmitir
+ * sem roubar FPS do jogo.
+ */
+export type VideoCodec = 'vp8' | 'h264' | 'vp9' | 'av1';
+
+export const DEFAULT_VIDEO_CODEC: VideoCodec = 'vp8';
+
+/**
  * `screenShareEncoding`, NAO `videoEncoding`: para source ScreenShare o
  * livekit-client le exclusivamente o primeiro e ignora o segundo em silencio,
  * caindo no padrao ScreenSharePresets.h1080fps15 — um teto de 15 FPS.
  */
-export function screenShareOptions(preset: QualityPreset) {
+export function screenShareOptions(preset: QualityPreset, codec: VideoCodec = DEFAULT_VIDEO_CODEC) {
   return {
     name: 'screen',
     simulcast: SCREEN_SHARE_SIMULCAST,
     screenShareEncoding: { maxBitrate: preset.maxBitrate, maxFramerate: preset.frameRate },
     /** jogo: preferimos fps a nitidez */
     degradationPreference: 'maintain-framerate',
+    videoCodec: codec,
   } as const;
 }
 
