@@ -153,7 +153,9 @@ const INITIAL: BroadcastState = {
   selectedSourceId: null,
   preset: DEFAULT_PRESET,
   codec: DEFAULT_VIDEO_CODEC,
-  clipeLigado: false,
+  // Ligado por padrao: clipe que exige lembrar de ligar antes nao clipa nada,
+  // porque quando a jogada acontece ela ja passou. Da para desligar se pesar.
+  clipeLigado: true,
   clipeSegundos: 0,
   stats: EMPTY_STATS,
   error: null,
@@ -283,9 +285,8 @@ export class Broadcaster {
   }
 
   /**
-   * Liga o buffer de clipe. Desligado por padrao porque gravar significa um
-   * SEGUNDO encoder rodando junto com o da transmissao, na mesma CPU que o
-   * jogo esta usando. Quem quiser clipar aceita esse custo conscientemente.
+   * Liga ou desliga o buffer. Fica LIGADO por padrao — ver o comentario no
+   * estado inicial. Desligar existe para quem sentir o custo de CPU no jogo.
    */
   setClipe(ligado: boolean): void {
     this.set({ clipeLigado: ligado });
@@ -293,7 +294,7 @@ export class Broadcaster {
       this.clipe.parar();
       this.set({ clipeSegundos: 0 });
     } else if (this.stream) {
-      this.clipe.iniciar(this.stream, CLIPE_BITS_POR_SEGUNDO);
+      void this.clipe.iniciar(this.stream, CLIPE_BITS_POR_SEGUNDO);
     }
   }
 
@@ -459,7 +460,7 @@ export class Broadcaster {
 
       // so depois de publicar: se a publicacao falhar, nao vale a pena ter
       // gasto CPU com um segundo encoder
-      if (this.state.clipeLigado) this.clipe.iniciar(stream, CLIPE_BITS_POR_SEGUNDO);
+      if (this.state.clipeLigado) await this.clipe.iniciar(stream, CLIPE_BITS_POR_SEGUNDO);
     } catch (err) {
       this.failure(`Falha ao publicar as faixas no LiveKit: ${errorMessage(err)}`);
       return;
