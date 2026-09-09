@@ -327,6 +327,25 @@ body {
   user-select: text;
 }
 
+.clipe {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.clipe input {
+  accent-color: var(--accent, #2f81f7);
+  cursor: pointer;
+}
+
+.clipe .muted {
+  font-size: 12px;
+}
+
 .notice {
   margin: 16px 0 0;
   padding: 11px 14px;

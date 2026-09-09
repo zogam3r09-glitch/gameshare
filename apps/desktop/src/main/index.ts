@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { writeFile } from 'node:fs/promises';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell } from 'electron';
 import { createLogger, errorMessage } from '@game-share/shared';
 import {
@@ -221,6 +222,40 @@ function registerIpc(): void {
   ipcMain.handle('app:setBroadcasting', (_e, live: unknown) => {
     broadcasting = live === true;
     log.debug('estado de transmissao informado pelo renderer', { broadcasting });
+  });
+
+  /**
+   * Salva um clipe. O renderer manda os bytes porque ele e quem tem o
+   * MediaRecorder; o main e quem pode escrever em disco.
+   *
+   * Limite de 256 MB: o buffer de clipe e curto por natureza (dezenas de
+   * segundos), entao qualquer coisa maior que isso e defeito ou abuso, e vale
+   * recusar antes de alocar.
+   */
+  ipcMain.handle('clip:save', async (_e, bytes: unknown, nome: unknown) => {
+    if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) return null;
+    if (bytes.byteLength > 256 * 1024 * 1024) {
+      log.warn('clipe recusado por tamanho', { bytes: bytes.byteLength });
+      return null;
+    }
+
+    const sugerido = typeof nome === 'string' && /^[\w .-]{1,80}$/.test(nome) ? nome : 'clipe.webm';
+    const [win] = BrowserWindow.getAllWindows();
+    const escolha = await dialog.showSaveDialog(win!, {
+      title: 'Salvar clipe',
+      defaultPath: join(app.getPath('videos'), sugerido),
+      filters: [{ name: 'Vídeo WebM', extensions: ['webm'] }],
+    });
+    if (escolha.canceled || !escolha.filePath) return null;
+
+    try {
+      await writeFile(escolha.filePath, bytes);
+      log.info('clipe salvo', { bytes: bytes.byteLength });
+      return escolha.filePath;
+    } catch (err) {
+      log.error('falha ao salvar clipe', { message: errorMessage(err) });
+      return null;
+    }
   });
 
   ipcMain.handle('shell:copy', (_e, text: unknown) => {

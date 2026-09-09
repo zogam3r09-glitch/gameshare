@@ -27,6 +27,7 @@ import {
   type QualityPresetName,
 } from '@game-share/shared';
 import { TokenServerError, createRoom, endRoom } from './api.js';
+import { ClipBuffer } from './clipBuffer.js';
 
 const log = createLogger('broadcast');
 
@@ -109,6 +110,10 @@ export interface BroadcastState {
   preset: QualityPresetName;
   /** experimento de codec; sem UI, ver setCodec */
   codec: VideoCodec;
+  /** gravar os ultimos segundos para clipar; custa CPU, entao e opcional */
+  clipeLigado: boolean;
+  /** segundos ja disponiveis no buffer, 0 quando desligado */
+  clipeSegundos: number;
   stats: LiveStats;
   /** erro fatal: a UI mostra a tela de erro */
   error: string | null;
@@ -148,10 +153,22 @@ const INITIAL: BroadcastState = {
   selectedSourceId: null,
   preset: DEFAULT_PRESET,
   codec: DEFAULT_VIDEO_CODEC,
+  clipeLigado: false,
+  clipeSegundos: 0,
   stats: EMPTY_STATS,
   error: null,
   notice: null,
 };
+
+/** Janela do buffer de clipe. Trinta segundos cobrem a jogada que acabou. */
+const CLIPE_SEGUNDOS = 30;
+
+/**
+ * Bitrate da gravacao local, deliberadamente abaixo do da transmissao: o clipe
+ * e para mandar no grupo, nao para arquivar. Menos bits = menos trabalho do
+ * segundo encoder, que disputa CPU com o jogo.
+ */
+const CLIPE_BITS_POR_SEGUNDO = 2_500_000;
 
 const DISCONNECT_REASON_PT: Partial<Record<DisconnectReason, string>> = {
   [DisconnectReason.CLIENT_INITIATED]: 'Transmissao encerrada por voce.',
@@ -173,6 +190,7 @@ export class Broadcaster {
   private statsTimer: ReturnType<typeof setInterval> | null = null;
   private lastBytesSent: MarcaBytes | null = null;
   private statsTick = 0;
+  private readonly clipe = new ClipBuffer(CLIPE_SEGUNDOS);
 
   subscribe(listener: (s: BroadcastState) => void): () => void {
     this.listeners.add(listener);
@@ -262,6 +280,41 @@ export class Broadcaster {
    */
   setCodec(codec: VideoCodec): void {
     if (this.state.phase === 'choosing' || this.state.phase === 'idle') this.set({ codec });
+  }
+
+  /**
+   * Liga o buffer de clipe. Desligado por padrao porque gravar significa um
+   * SEGUNDO encoder rodando junto com o da transmissao, na mesma CPU que o
+   * jogo esta usando. Quem quiser clipar aceita esse custo conscientemente.
+   */
+  setClipe(ligado: boolean): void {
+    this.set({ clipeLigado: ligado });
+    if (!ligado) {
+      this.clipe.parar();
+      this.set({ clipeSegundos: 0 });
+    } else if (this.stream) {
+      this.clipe.iniciar(this.stream, CLIPE_BITS_POR_SEGUNDO);
+    }
+  }
+
+  /**
+   * Salva os ultimos segundos gravados. Devolve o caminho, ou null se nao
+   * havia nada gravado ou o usuario cancelou o dialogo.
+   */
+  async clipar(): Promise<string | null> {
+    const blob = this.clipe.montar();
+    if (!blob) {
+      this.set({ notice: 'Nada gravado ainda. Ligue "Gravar para clipar" e espere alguns segundos.' });
+      return null;
+    }
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const carimbo = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const caminho = await window.gameShare.saveClip(bytes, `clipe-${carimbo}.webm`);
+    if (caminho) {
+      log.info('clipe salvo', { caminho, bytes: bytes.byteLength });
+      this.set({ notice: 'Clipe salvo.' });
+    }
+    return caminho;
   }
 
   // -------------------------------------------------------------------------
@@ -403,6 +456,10 @@ export class Broadcaster {
         });
         log.info('audio do sistema publicado');
       }
+
+      // so depois de publicar: se a publicacao falhar, nao vale a pena ter
+      // gasto CPU com um segundo encoder
+      if (this.state.clipeLigado) this.clipe.iniciar(stream, CLIPE_BITS_POR_SEGUNDO);
     } catch (err) {
       this.failure(`Falha ao publicar as faixas no LiveKit: ${errorMessage(err)}`);
       return;
@@ -546,6 +603,11 @@ export class Broadcaster {
 
     // Uma linha a cada ~6s no terminal. Sem isto o diagnostico so existe na
     // UI, e ninguem consegue reconstruir depois o que aconteceu durante o jogo.
+    if (this.state.clipeLigado) {
+      const disponivel = Math.round(this.clipe.disponivel);
+      if (disponivel !== this.state.clipeSegundos) this.set({ clipeSegundos: disponivel });
+    }
+
     if (this.statsTick++ % 4 === 0) {
       const s = this.state.stats;
       const wanted = QUALITY_PRESETS[this.state.preset];
@@ -599,6 +661,7 @@ export class Broadcaster {
 
   private async teardown(): Promise<void> {
     this.stopStatsPolling();
+    this.clipe.parar();
 
     if (this.room) {
       const room = this.room;

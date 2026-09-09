@@ -19,6 +19,9 @@ const api = {
   clearCaptureSource: (): Promise<void> => ipcRenderer.invoke('capture:clear'),
   reportAudioUnavailable: (): Promise<void> => ipcRenderer.invoke('capture:audioUnavailable'),
   isLoopbackAudioSupported: (): Promise<boolean> => ipcRenderer.invoke('capture:loopbackSupported'),
+  /** Devolve o caminho salvo, ou null se o usuario cancelou ou falhou. */
+  saveClip: (bytes: Uint8Array, nome: string): Promise<string | null> =>
+    ipcRenderer.invoke('clip:save', bytes, nome),
   copyToClipboard: (text: string): Promise<boolean> => ipcRenderer.invoke('shell:copy', text),
   openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke('shell:openExternal', url),
 } as const;

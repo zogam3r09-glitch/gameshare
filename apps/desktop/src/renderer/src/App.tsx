@@ -292,7 +292,28 @@ function LivePanel({ state }: { state: BroadcastState }): React.JSX.Element {
         </dl>
       </details>
 
+      {/* Gravar re-codifica o video: e um segundo encoder disputando a CPU
+          com o jogo. Por isso a opcao existe, em vez de ficar sempre ligada. */}
+      <label className="clipe">
+        <input
+          type="checkbox"
+          checked={state.clipeLigado}
+          onChange={(e) => broadcaster.setClipe(e.currentTarget.checked)}
+        />
+        Gravar últimos 30s para clipar
+        <span className="muted"> (usa CPU)</span>
+      </label>
+
       <div className="panel__foot">
+        {state.clipeLigado && (
+          <button
+            className="btn"
+            disabled={state.clipeSegundos < 2}
+            onClick={() => void broadcaster.clipar()}
+          >
+            {state.clipeSegundos < 2 ? 'GRAVANDO…' : `SALVAR ÚLTIMOS ${state.clipeSegundos}s`}
+          </button>
+        )}
         <button className="btn" onClick={() => void copy()}>
           {copied ? 'COPIADO ✓' : 'COPIAR LINK'}
         </button>
