@@ -217,6 +217,88 @@ test.describe('publisher -> viewer', () => {
     await pubContext.close();
   });
 
+  /**
+   * Aba escondida suspende o video para poupar banda — mas a track sai da sala
+   * quando isso acontece, e `nextPhase` concluiria "sem video" e mandaria a
+   * fase para `ended`. O espectador veria "Transmissao encerrada" com a
+   * transmissao no ar, que e a mesma familia de bug que ja travou o viewer em
+   * "Aguardando" para sempre.
+   */
+  test('aba escondida pausa o video sem declarar a transmissao encerrada', async ({
+    browser,
+    baseURL,
+  }) => {
+    const pubContext = await browser.newContext();
+    const pub = await pubContext.newPage();
+
+    let room: CreatedRoom;
+    try {
+      room = await startFakePublisher(pub, baseURL!);
+    } catch (err) {
+      await pubContext.close();
+      test.skip(true, `LiveKit indisponivel: ${String(err)}`);
+      return;
+    }
+
+    const viewer = await (await browser.newContext()).newPage();
+    await viewer.goto(`/watch/${room.roomId}`);
+    await expect(viewer.locator('video.stage--on')).toBeVisible({ timeout: 20_000 });
+
+    // O Playwright nao esconde aba de verdade; forcamos o mesmo caminho de
+    // codigo sobrescrevendo document.hidden e disparando o evento.
+    const definirVisibilidade = (escondida: boolean): Promise<void> =>
+      viewer.evaluate((h) => {
+        Object.defineProperty(document, 'hidden', { value: h, configurable: true });
+        Object.defineProperty(document, 'visibilityState', {
+          value: h ? 'hidden' : 'visible',
+          configurable: true,
+        });
+        document.dispatchEvent(new Event('visibilitychange'));
+      }, escondida);
+
+    await definirVisibilidade(true);
+    await expect(viewer.getByText('vídeo pausado — aba em segundo plano')).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // O ponto do teste: pausado NAO e encerrado.
+    await expect(viewer.getByRole('heading', { name: 'Transmissão encerrada' })).toBeHidden();
+    await expect(viewer.getByText('Aguardando transmissão…')).toBeHidden();
+
+    /**
+     * A prova de que a pausa economiza banda de verdade: os quadros param de
+     * chegar. Nao adianta checar `muted` na faixa — `setEnabled(false)` nao
+     * cancela a assinatura nem marca a faixa como silenciada; ele pede ao
+     * servidor para parar de enviar, e o unico sintoma observavel aqui e o
+     * contador de quadros decodificados parando de subir.
+     */
+    const quadros = (): Promise<number> =>
+      viewer.evaluate(
+        () => document.querySelector('video')?.getVideoPlaybackQuality().totalVideoFrames ?? 0,
+      );
+
+    const antes = await quadros();
+    await viewer.waitForTimeout(2500);
+    const depois = await quadros();
+    expect(depois - antes, `chegaram ${depois - antes} quadros com o video pausado`).toBeLessThan(3);
+
+    // E voltar para a aba retoma, sem deixar o aviso preso na barra.
+    await definirVisibilidade(false);
+    await expect(viewer.getByText('vídeo pausado — aba em segundo plano')).toBeHidden({
+      timeout: 10_000,
+    });
+    await expect(viewer.locator('video.stage--on')).toBeVisible();
+
+    // e os quadros voltam a chegar
+    const retomado = await quadros();
+    await viewer.waitForTimeout(2500);
+    expect(await quadros(), 'nenhum quadro novo depois de voltar para a aba').toBeGreaterThan(
+      retomado,
+    );
+
+    await pubContext.close();
+  });
+
   test('um espectador nao consegue encerrar a transmissao de outra pessoa', async ({
     browser,
     baseURL,

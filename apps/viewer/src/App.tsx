@@ -126,6 +126,13 @@ function Watch({ roomId }: { roomId: string }): React.JSX.Element {
         {!watch.hasAudio && watch.phase === 'playing' && (
           <span className="bar__item bar__item--warn">sem áudio</span>
         )}
+        {/* A pessoa volta para a aba e ve a ultima imagem congelada por um
+            instante; sem isto parece travamento em vez de retomada. */}
+        {watch.videoPausado && (
+          <span className="bar__item bar__item--warn" title="O áudio continuou tocando">
+            vídeo pausado — aba em segundo plano
+          </span>
+        )}
         {watch.notice && <span className="bar__item bar__item--warn">{watch.notice}</span>}
 
         <button className="bar__btn" onClick={toggleFullscreen}>

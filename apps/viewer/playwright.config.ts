@@ -47,7 +47,13 @@ export default defineConfig({
       // desktop) faz o viewer de teste pedir token para o servidor publicado,
       // cujo ALLOWED_ORIGINS nao inclui localhost — e todo e2e quebra por CORS,
       // com sintoma de "video nao aparece". Ja aconteceu.
-      env: { VITE_TOKEN_SERVER_URL: 'http://127.0.0.1:8787' },
+      env: {
+        VITE_TOKEN_SERVER_URL: 'http://127.0.0.1:8787',
+        // Em producao a pausa por aba escondida espera 30 s, para trocar de
+        // janela por dois segundos nao derrubar o video. No teste isso seria
+        // meio minuto parado por assercao.
+        VITE_PAUSE_DELAY_MS: '600',
+      },
       reuseExistingServer: false,
       timeout: 60_000,
     },

@@ -47,7 +47,21 @@ export interface WatchState {
   hasAudio: boolean;
   /** o navegador bloqueou o autoplay do audio: precisa de um clique */
   audioBlocked: boolean;
+  /** video suspenso porque a aba ficou escondida; o audio continua */
+  videoPausado: boolean;
 }
+
+/**
+ * Quanto tempo a aba precisa ficar escondida antes de suspender o video.
+ *
+ * Nao e zero de proposito. Retomar custa a rampa do encoder — a mesma que
+ * fazia o primeiro espectador ver 320x180 por 24 s — entao alternar de aba por
+ * dois segundos nao pode disparar isso. Meio minuto separa "trocou de janela"
+ * de "foi embora e esqueceu aberto", que e o caso que gasta banda a toa.
+ */
+const ATRASO_PAUSA_MS = Number(
+  (import.meta.env.VITE_PAUSE_DELAY_MS as string | undefined) ?? 30_000,
+);
 
 /**
  * Fase derivada do estado real da sala.
@@ -76,6 +90,7 @@ const INITIAL: WatchState = {
   connection: ConnectionState.Disconnected,
   hasAudio: false,
   audioBlocked: false,
+  videoPausado: false,
 };
 
 export interface UseWatchRoom extends WatchState {
@@ -113,6 +128,15 @@ export function useWatchRoom(roomId: string): UseWatchRoom {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const roomRef = useRef<Room | null>(null);
   const videoTrackRef = useRef<RemoteVideoTrack | null>(null);
+  /**
+   * Se o video esta suspenso por aba escondida.
+   *
+   * Medido: `setEnabled(false)` NAO cancela a assinatura — a faixa continua
+   * anexada e o calculo de fase segue vendo "tem video" sozinho. Por isso este
+   * ref nao entra em `sync()`: cheguei a por um guarda la e ele nao era
+   * necessario. Serve so para saber se ha o que retomar.
+   */
+  const pausadoRef = useRef(false);
 
   const patch = useCallback((p: Partial<WatchState>) => setState((s) => ({ ...s, ...p })), []);
 
@@ -258,6 +282,58 @@ export function useWatchRoom(roomId: string): UseWatchRoom {
       roomRef.current = null;
     };
   }, [roomId, patch]);
+
+  /**
+   * Aba escondida por mais de 30 s: manda o servidor parar de enviar VIDEO.
+   *
+   * Aba minimizada continua baixando vídeo hoje, e quem esquece a aba aberta e
+   * uma fatia real do consumo. O audio segue tocando de proposito — muita gente
+   * deixa a transmissao rodando so para ouvir enquanto faz outra coisa, e audio
+   * custa ~12% do que o video custa.
+   */
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const publicacaoDeVideo = () => {
+      const room = roomRef.current;
+      if (!room) return null;
+      for (const participante of room.remoteParticipants.values()) {
+        for (const pub of participante.trackPublications.values()) {
+          if (pub.kind === 'video') return pub;
+        }
+      }
+      return null;
+    };
+
+    const definir = (enviar: boolean): void => {
+      const pub = publicacaoDeVideo();
+      if (!pub) return;
+      pausadoRef.current = !enviar;
+      pub.setEnabled(enviar);
+      patch({ videoPausado: !enviar });
+      log.info(enviar ? 'video retomado' : 'video suspenso: aba escondida');
+    };
+
+    const aoMudar = (): void => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (document.hidden) {
+        timer = setTimeout(() => definir(false), ATRASO_PAUSA_MS);
+      } else if (pausadoRef.current) {
+        definir(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', aoMudar);
+    return () => {
+      document.removeEventListener('visibilitychange', aoMudar);
+      if (timer) clearTimeout(timer);
+      // nao deixa a track desabilitada para o proximo render
+      if (pausadoRef.current) definir(true);
+    };
+  }, [patch]);
 
   /**
    * `jitterBufferMs` e o numero que explica "lag do mouse": quanto tempo cada
